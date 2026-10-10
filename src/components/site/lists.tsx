@@ -173,7 +173,6 @@ export function ProjectGrid({ rows, linked = true }: { rows: Row[]; linked?: boo
           <>
             <div className="flex items-start justify-between gap-4">
               <h3 className="text-base font-semibold tracking-tight">{str(row, "title")}</h3>
-              <span className="eyebrow shrink-0">#{String(row.sort_order ?? "")}</span>
             </div>
             <p className="mt-2 text-sm leading-relaxed text-muted">{str(row, "summary")}</p>
             {techOf(row).length > 0 ? (
