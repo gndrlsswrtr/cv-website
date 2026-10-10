@@ -272,6 +272,18 @@ export async function updateResource(_prev: FormState, formData: FormData): Prom
   redirect(`/admin/${key}?saved=1`);
 }
 
+/**
+ * Where to send the owner after an in-place action (publish toggle, reorder,
+ * delete). Only same-site absolute paths are accepted.
+ */
+function backToList(formData: FormData, fallback: string): string {
+  const next = text(formData, "next");
+  if (next.startsWith("/") && !next.startsWith("//") && !next.includes("\\")) {
+    return next;
+  }
+  return fallback;
+}
+
 export async function deleteResource(formData: FormData): Promise<void> {
   await requireUser();
 
@@ -282,7 +294,7 @@ export async function deleteResource(formData: FormData): Promise<void> {
   const id = text(formData, "__id");
   deleteRow(key, id);
   updateTag(CONTENT_TAG);
-  redirect(`/admin/${key}?deleted=1`);
+  redirect(backToList(formData, `/admin/${key}?deleted=1`));
 }
 
 export async function togglePublish(formData: FormData): Promise<void> {
@@ -298,6 +310,7 @@ export async function togglePublish(formData: FormData): Promise<void> {
 
   setPublished(key, id, row.published !== 1);
   updateTag(CONTENT_TAG);
+  redirect(backToList(formData, `/admin/${key}`));
 }
 
 export async function moveItem(formData: FormData): Promise<void> {
@@ -311,6 +324,7 @@ export async function moveItem(formData: FormData): Promise<void> {
   const direction = text(formData, "__dir") === "up" ? "up" : "down";
   moveRow(key, id, direction);
   updateTag(CONTENT_TAG);
+  redirect(backToList(formData, `/admin/${key}`));
 }
 
 /* ------------------------------------------------------------------ */

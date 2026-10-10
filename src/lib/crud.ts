@@ -172,11 +172,13 @@ export function createRow(
     }
   }
 
-  // The form's checkbox wins; otherwise fall back to the resource default
-  // (documents default to draft because they often contain personal data).
+  // A checkbox in the form wins; resources without one fall back to their
+  // declared default (documents default to draft because they often contain
+  // personal data).
+  const hasPublishedField = def.fields.some((field) => field.name === "published");
   columns.push("published");
   params.push(
-    rawValues.published !== undefined
+    hasPublishedField && rawValues.published !== undefined
       ? rawValues.published === "1"
         ? 1
         : 0
