@@ -13,7 +13,7 @@ import {
   ProjectGrid,
   SkillGrid,
 } from "@/components/site/lists";
-import { Description, EmptyState, ExternalLink, PageHeader, Pill, Section } from "@/components/site/ui";
+import { Description, EmptyState, ExternalLink, Pill, Section } from "@/components/site/ui";
 import { CONTENT_TAG, getProfile, getPublished } from "@/lib/content";
 import { excerpt } from "@/lib/format";
 
