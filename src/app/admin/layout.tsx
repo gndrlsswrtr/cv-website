@@ -70,7 +70,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         </nav>
 
         {/* Content --------------------------------------------------- */}
-        <div className="min-w-0 flex-1">{children}</div>
+        <main id="main" className="min-w-0 flex-1">
+          {children}
+        </main>
       </div>
     </div>
   );
