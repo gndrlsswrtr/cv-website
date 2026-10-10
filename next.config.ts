@@ -31,13 +31,6 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      {
-        // Uploaded documents are never cached by shared proxies.
-        source: "/documents/:path*",
-        headers: [
-          { key: "Cache-Control", value: "private, no-store" },
-        ],
-      },
     ];
   },
 };
