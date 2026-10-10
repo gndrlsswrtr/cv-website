@@ -1,9 +1,8 @@
-"use client";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { Suspense } from "react";
 
+import { MobileMenu } from "./MobileMenu";
+import { NavLinks } from "./NavLinks";
 import { NAV_ITEMS } from "./nav";
 
 type HeaderProfile = {
@@ -11,13 +10,14 @@ type HeaderProfile = {
   headline: string;
 };
 
+/**
+ * Server component: everything here prerenders into the static shell, except
+ * the nav — which needs the current URL and therefore streams in behind a
+ * boundary. The fallback renders the same links without active highlighting,
+ * so there is no visible layout shift.
+ */
 export function SiteHeader({ profile }: { profile: HeaderProfile }) {
-  const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-
   const name = profile.full_name.trim() || "Portfolio";
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-md">
@@ -39,57 +39,27 @@ export function SiteHeader({ profile }: { profile: HeaderProfile }) {
         </Link>
 
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
-                isActive(item.href)
-                  ? "bg-accent-soft font-medium text-accent"
-                  : "text-muted hover:text-foreground"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+          <Suspense
+            fallback={
+              <>
+                {NAV_ITEMS.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="rounded-md px-2.5 py-1.5 text-[13px] text-muted"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </>
+            }
+          >
+            <NavLinks />
+          </Suspense>
         </nav>
 
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          aria-expanded={open}
-          aria-controls="mobile-nav"
-          className="btn btn-secondary lg:hidden"
-        >
-          {open ? "Close" : "Menu"}
-        </button>
+        <MobileMenu />
       </div>
-
-      {open ? (
-        <nav
-          id="mobile-nav"
-          aria-label="Main"
-          className="border-t border-border bg-background px-5 pb-4 pt-2 sm:px-8 lg:hidden"
-        >
-          <ul className="grid gap-1">
-            {NAV_ITEMS.map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={`block rounded-md px-3 py-2 text-sm ${
-                    isActive(item.href)
-                      ? "bg-accent-soft font-medium text-accent"
-                      : "text-muted hover:text-foreground"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      ) : null}
     </header>
   );
 }

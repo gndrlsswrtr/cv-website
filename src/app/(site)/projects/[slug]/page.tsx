@@ -1,12 +1,10 @@
-'use cache'
-
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { cacheLife, cacheTag } from "next/cache";
+import { Suspense } from "react";
 
 import { Description, ExternalLink, PageHeader, Pill } from "@/components/site/ui";
-import { CONTENT_TAG, getPublishedProject } from "@/lib/content";
+import { getPublishedProject } from "@/lib/content";
 import { excerpt } from "@/lib/format";
 
 type PageProps = { params: Promise<{ slug: string }> };
@@ -19,13 +17,39 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const title = String(project.title ?? "Project");
   const description =
     excerpt(String(project.summary ?? ""), 160) || `Project: ${title}`;
-  return { title, description, openGraph: { title, description, type: "article" } };
+  return {
+    title,
+    description,
+    openGraph: { title, description, type: "article" },
+  };
 }
 
-export default async function ProjectPage({ params }: PageProps) {
-  cacheTag(CONTENT_TAG);
-  cacheLife("minutes");
+/**
+ * `params` only resolves at request time, so the body streams behind a
+ * boundary. The data itself still comes from a cached, tagged getter.
+ */
+export default function ProjectPage({ params }: PageProps) {
+  return (
+    <Suspense
+      fallback={
+        <div>
+          <p className="eyebrow mb-3">
+            <Link href="/projects" className="hover:text-accent">
+              ← Projects
+            </Link>
+          </p>
+          <div className="h-8 w-64 animate-pulse rounded bg-border" />
+          <div className="mt-6 h-4 w-full max-w-3xl animate-pulse rounded bg-border" />
+          <div className="mt-2 h-4 w-2/3 max-w-3xl animate-pulse rounded bg-border" />
+        </div>
+      }
+    >
+      <ProjectDetail params={params} />
+    </Suspense>
+  );
+}
 
+async function ProjectDetail({ params }: PageProps) {
   const { slug } = await params;
   const project = await getPublishedProject(slug);
   if (!project) notFound();
@@ -36,8 +60,12 @@ export default async function ProjectPage({ params }: PageProps) {
     .filter(Boolean);
 
   const links: { href: string; label: string }[] = [];
-  if (String(project.repo_url ?? "")) links.push({ href: String(project.repo_url), label: "Source code" });
-  if (String(project.demo_url ?? "")) links.push({ href: String(project.demo_url), label: "Live demo" });
+  if (String(project.repo_url ?? "")) {
+    links.push({ href: String(project.repo_url), label: "Source code" });
+  }
+  if (String(project.demo_url ?? "")) {
+    links.push({ href: String(project.demo_url), label: "Live demo" });
+  }
 
   return (
     <article>
