@@ -178,18 +178,22 @@ export async function changePassword(_prev: FormState, formData: FormData): Prom
 /* Content CRUD                                                        */
 /* ------------------------------------------------------------------ */
 
-function loadResource(formData: FormData): { key: ResourceKey; def: ResourceDef } | FormState {
+type LoadResult =
+  | { ok: true; key: ResourceKey; def: ResourceDef }
+  | { ok: false; state: FormState };
+
+function loadResource(formData: FormData): LoadResult {
   const key = resourceFromForm(formData);
   const def = key ? getResource(key) : undefined;
-  if (!key || !def) return { error: "Unknown content type." };
-  return { key, def };
+  if (!key || !def) return { ok: false, state: { error: "Unknown content type." } };
+  return { ok: true, key, def };
 }
 
 export async function createResource(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireUser();
 
   const loaded = loadResource(formData);
-  if ("error" in loaded) return loaded;
+  if (!loaded.ok) return loaded.state;
   const { key, def } = loaded;
 
   const values = readValues(def, formData);
@@ -227,7 +231,7 @@ export async function updateResource(_prev: FormState, formData: FormData): Prom
   await requireUser();
 
   const loaded = loadResource(formData);
-  if ("error" in loaded) return loaded;
+  if (!loaded.ok) return loaded.state;
   const { key, def } = loaded;
 
   const id = text(formData, "__id");
@@ -272,7 +276,7 @@ export async function deleteResource(formData: FormData): Promise<void> {
   await requireUser();
 
   const loaded = loadResource(formData);
-  if ("error" in loaded) return;
+  if (!loaded.ok) return;
   const { key } = loaded;
 
   const id = text(formData, "__id");
@@ -285,7 +289,7 @@ export async function togglePublish(formData: FormData): Promise<void> {
   await requireUser();
 
   const loaded = loadResource(formData);
-  if ("error" in loaded) return;
+  if (!loaded.ok) return;
   const { key } = loaded;
 
   const id = text(formData, "__id");
@@ -300,7 +304,7 @@ export async function moveItem(formData: FormData): Promise<void> {
   await requireUser();
 
   const loaded = loadResource(formData);
-  if ("error" in loaded) return;
+  if (!loaded.ok) return;
   const { key } = loaded;
 
   const id = text(formData, "__id");
