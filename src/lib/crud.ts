@@ -159,6 +159,7 @@ export function createRow(
   const params: (string | number)[] = [randomUUID(), now(), now()];
 
   for (const column of writableColumns(def)) {
+    if (column === "published") continue; // handled below
     columns.push(assertIdentifier(column));
     if (column === "slug") {
       const base = slugify(rawValues.slug || rawValues.title || "");
@@ -221,6 +222,7 @@ export function updateRow(
   const params: (string | number)[] = [now()];
 
   for (const column of writableColumns(def)) {
+    if (column === "published") continue; // handled below
     sets.push(`${assertIdentifier(column)} = ?`);
     if (column === "slug") {
       const base = slugify(rawValues.slug || rawValues.title || "");
