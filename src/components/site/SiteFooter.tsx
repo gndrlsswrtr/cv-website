@@ -26,7 +26,7 @@ function labelFor(href: string, fallback: string): string {
  * Cached (and tagged like the rest of the public site) so the year can be
  * read at render time without making the layout request-dependent.
  */
-export function SiteFooter({ profile }: { profile: FooterProfile }) {
+export async function SiteFooter({ profile }: { profile: FooterProfile }) {
   "use cache";
   cacheTag(CONTENT_TAG);
   cacheLife("minutes");
