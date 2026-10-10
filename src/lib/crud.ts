@@ -171,9 +171,18 @@ export function createRow(
     }
   }
 
-  // `published` defaults per resource; documents default to draft.
+  // The form's checkbox wins; otherwise fall back to the resource default
+  // (documents default to draft because they often contain personal data).
   columns.push("published");
-  params.push(def.defaultPublished ? 1 : 0);
+  params.push(
+    rawValues.published !== undefined
+      ? rawValues.published === "1"
+        ? 1
+        : 0
+      : def.defaultPublished
+        ? 1
+        : 0,
+  );
 
   for (const [column, value] of Object.entries(extra)) {
     columns.push(assertIdentifier(column));
