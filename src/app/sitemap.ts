@@ -13,9 +13,12 @@ const STATIC_PATHS = [
   "/documents",
 ];
 
+// Evaluated once at build time so the prerender does not see a live clock.
+const TODAY = new Date().toISOString().slice(0, 10);
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = process.env.SITE_URL || "http://localhost:3000";
-  const today = new Date().toISOString().slice(0, 10);
+  const today = TODAY;
 
   const entries: MetadataRoute.Sitemap = STATIC_PATHS.map((path, index) => ({
     url: `${base}${path}`,

@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { cacheLife, cacheTag } from "next/cache";
+
+import { CONTENT_TAG } from "@/lib/content";
 
 type FooterProfile = {
   full_name: string;
@@ -19,7 +22,15 @@ function labelFor(href: string, fallback: string): string {
   }
 }
 
+/**
+ * Cached (and tagged like the rest of the public site) so the year can be
+ * read at render time without making the layout request-dependent.
+ */
 export function SiteFooter({ profile }: { profile: FooterProfile }) {
+  "use cache";
+  cacheTag(CONTENT_TAG);
+  cacheLife("minutes");
+
   const links: { href: string; label: string }[] = [];
 
   if (profile.website) {
