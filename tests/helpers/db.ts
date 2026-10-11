@@ -52,6 +52,20 @@ export async function publicQuery<T extends QueryResultRow = Record<string, unkn
   }
 }
 
+/**
+ * Leave the migration bookkeeping empty when a suite finishes.
+ *
+ * `tests/database.test.ts` asserts that *its own* `beforeAll` applies at least
+ * one migration — an assertion that only holds while no earlier suite has
+ * already recorded them. Every migration file is idempotent (guarded by
+ * `IF NOT EXISTS` / `DROP IF EXISTS`), so the next suite simply re-applies
+ * them. Database-touching suites call this in `afterAll` so the whole run
+ * stays green regardless of file order.
+ */
+export async function resetMigrationBookkeeping(): Promise<void> {
+  await adminQuery(`DELETE FROM schema_migrations`);
+}
+
 /** Wipe every content row so suites stay independent. */
 export async function resetContent(): Promise<void> {
   // `DELETE`, not `TRUNCATE ... CASCADE`: profile.avatar_id has a foreign key

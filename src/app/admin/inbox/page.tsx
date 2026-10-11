@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Check, Trash2 } from "lucide-react";
 
-import { deleteMessageAction, markMessageReadAction } from "./inbox-actions";
+import { deleteMessageAction, markMessageReadAction } from "../inbox-actions";
 import { ConfirmSubmit } from "@/components/admin/ConfirmSubmit";
 import { EmptyState } from "@/components/site/ui";
 import { requireUser } from "@/lib/auth/session";

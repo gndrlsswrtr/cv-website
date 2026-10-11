@@ -62,33 +62,35 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           aria-label="Admin"
           className="flex shrink-0 gap-1 overflow-x-auto pb-1 lg:w-56 lg:flex-col lg:overflow-visible lg:pb-0"
         >
-          {NAV_SECTIONS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="whitespace-nowrap rounded-md px-3 py-2 text-sm text-muted hover:bg-surface hover:text-foreground"
-            >
-              <span className="flex items-center gap-2">
-                {item.label}
-                {item.href === INBOX_HREF && unread > 0 ? (
-                  <span
-                    aria-hidden="true"
-                    className="badge"
-                    style={{
-                      color: "var(--accent)",
-                      borderColor: "color-mix(in srgb, var(--accent) 45%, transparent)",
-                      backgroundColor: "color-mix(in srgb, var(--accent) 10%, transparent)",
-                    }}
-                  >
-                    {unread}
-                  </span>
-                ) : null}
-                {item.href === INBOX_HREF && unread > 0 ? (
-                  <span className="sr-only">{unread} unread</span>
-                ) : null}
-              </span>
-            </Link>
-          ))}
+          {NAV_SECTIONS.map((item) => {
+            const showUnread = item.href === INBOX_HREF && unread > 0;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="whitespace-nowrap rounded-md px-3 py-2 text-sm text-muted hover:bg-surface hover:text-foreground"
+              >
+                <span className="flex items-center gap-2">
+                  {item.label}
+                  {showUnread ? (
+                    // `.badge` is unlayered CSS, so its colour has to be
+                    // overridden inline to pick up the accent tint.
+                    <span
+                      className="badge"
+                      style={{
+                        color: "var(--accent)",
+                        borderColor: "color-mix(in srgb, var(--accent) 45%, transparent)",
+                        backgroundColor: "color-mix(in srgb, var(--accent) 10%, transparent)",
+                      }}
+                    >
+                      {unread}
+                      <span className="sr-only"> unread</span>
+                    </span>
+                  ) : null}
+                </span>
+              </Link>
+            );
+          })}
         </nav>
 
         {/* Content --------------------------------------------------- */}
