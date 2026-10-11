@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Check, Mail, Trash2 } from "lucide-react";
+import { Check, Trash2 } from "lucide-react";
 
 import { deleteMessageAction, markMessageReadAction } from "./inbox-actions";
 import { ConfirmSubmit } from "@/components/admin/ConfirmSubmit";
@@ -24,6 +24,10 @@ const MAX_SHOWN = 100;
 function parseDate(value: string): Date | null {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatWhen(date: Date): string {
+  return date.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
 }
 
 export default async function InboxPage() {
@@ -55,6 +59,7 @@ export default async function InboxPage() {
           {messages.map((message) => {
             const isUnread = message.read_at === null;
             const name = message.name || "Anonymous";
+            const received = parseDate(message.created_at);
 
             return (
               <li key={message.id} className="px-5 py-4">
@@ -77,19 +82,11 @@ export default async function InboxPage() {
                         {message.email}
                       </a>
                       {" · "}
-                      {(() => {
-                        const date = parseDate(message.created_at);
-                        return date ? (
-                          <time dateTime={date.toISOString()}>
-                            {date.toLocaleString("en-GB", {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            })}
-                          </time>
-                        ) : (
-                          <span>{String(message.created_at)}</span>
-                        );
-                      })()}
+                      {received ? (
+                        <time dateTime={received.toISOString()}>{formatWhen(received)}</time>
+                      ) : (
+                        <span>{String(message.created_at)}</span>
+                      )}
                     </p>
                   </div>
 
