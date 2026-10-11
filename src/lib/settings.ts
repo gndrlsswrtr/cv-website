@@ -71,10 +71,15 @@ const BOOL_FIELDS: (keyof SiteSettings)[] = [
 function coerceSettings(row: Row | undefined): SiteSettings {
   const out: SiteSettings = { ...DEFAULT_SETTINGS };
   if (!row) return out;
+
+  // Indexing a mixed-type object by a union key needs a widened view.
+  const target = out as unknown as Record<string, string | boolean>;
+  const defaults = DEFAULT_SETTINGS as unknown as Record<string, string | boolean>;
+
   for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof SiteSettings)[]) {
     const value = row[key];
     if (value === undefined || value === null) continue;
-    out[key] = typeof DEFAULT_SETTINGS[key] === "boolean" ? value === true : String(value);
+    target[key] = typeof defaults[key] === "boolean" ? value === true : String(value);
   }
   return out;
 }

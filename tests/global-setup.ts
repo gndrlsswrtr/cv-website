@@ -38,7 +38,6 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   process.env.DATABASE_URL = `postgresql://postgres:password@127.0.0.1:${PORT}/portfolio_test`;
   // Tests must never inherit a developer's production settings.
   process.env.AUTO_MIGRATE = "true";
-  process.env.NODE_ENV = "test";
 
   return async () => {
     await server.stop().catch(() => undefined);

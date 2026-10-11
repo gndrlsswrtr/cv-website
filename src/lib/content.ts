@@ -9,7 +9,13 @@ import {
   type Row,
 } from "@/lib/crud";
 import { withPublicRole } from "@/lib/db";
-import type { ResourceKey } from "@/lib/resources";
+import { CONTENT_ORDER, type ResourceKey } from "@/lib/resources";
+import {
+  getPublicSettings,
+  getPublishedSocialLinks,
+  type SiteSettings,
+  type SocialLink,
+} from "@/lib/settings";
 
 /**
  * Data access split by trust level.
@@ -27,15 +33,7 @@ import type { ResourceKey } from "@/lib/resources";
 
 export const CONTENT_TAG = "content";
 
-const RESOURCE_KEYS: ResourceKey[] = [
-  "experience",
-  "education",
-  "skills",
-  "projects",
-  "achievements",
-  "certifications",
-  "documents",
-];
+const RESOURCE_KEYS: readonly ResourceKey[] = CONTENT_ORDER;
 
 /* ------------------------------------------------------------------ */
 /* Public (published only, RLS-enforced)                               */
@@ -83,6 +81,22 @@ export async function getPublicCounts(): Promise<Record<string, number>> {
     }
     return counts;
   });
+}
+
+/** Site title, meta description, featured sections and contact preferences. */
+export async function getSiteSettings(): Promise<SiteSettings> {
+  "use cache";
+  cacheTag(CONTENT_TAG);
+  cacheLife("minutes");
+  return getPublicSettings();
+}
+
+/** Published professional links for the footer and contact page. */
+export async function getSocialLinks(): Promise<SocialLink[]> {
+  "use cache";
+  cacheTag(CONTENT_TAG);
+  cacheLife("minutes");
+  return getPublishedSocialLinks();
 }
 
 /* ------------------------------------------------------------------ */
