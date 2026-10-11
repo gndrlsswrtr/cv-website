@@ -137,19 +137,44 @@ describe("saveUpload", () => {
     expect(fs.readdirSync(UPLOAD_DIR).length).toBe(before);
   });
 
-  it("KNOWN GAP: content bytes are not inspected — HTML named .png passes today", async () => {
-    // src/lib/storage.ts validates only the extension and the size: there is
-    // no magic-byte / signature check anywhere in the upload path (checked for
-    // PDF %PDF, PNG \x89PNG, JPEG \xFF\xD8\xFF, GIF GIF8, WebP RIFF…WEBP).
-    // This test pins the CURRENT behaviour so the gap stays loud; when
-    // signature checking lands, flip the expectation to `.rejects`.
-    const disguised = await storage.saveUpload(
-      upload(HTML_BYTES, "definitely-a-png.png", "image/png"),
-    );
-    expect(disguised.mime).toBe("image/png");
-    expect(storage.fileExists(disguised.storedName)).toBe(true);
+  it("inspects content bytes — HTML named .png is rejected", async () => {
+    // The extension allow-list is necessary but not sufficient: a browser will
+    // happily POST HTML with a filename of `definitely-a-png.png`. The stored
+    // bytes have to match the extension too, otherwise the file later gets
+    // served as image/png.
+    const before = fs.readdirSync(UPLOAD_DIR).length;
+    await expect(
+      storage.saveUpload(upload(HTML_BYTES, "definitely-a-png.png", "image/png")),
+    ).rejects.toThrow(/does not match|HTML|script/i);
+    expect(fs.readdirSync(UPLOAD_DIR).length).toBe(before);
+  });
 
-    await storage.deleteStored(disguised.storedName);
+  it("accepts content whose bytes really do match its extension", async () => {
+    // A real PNG signature, so the content check is not simply "reject all".
+    const png = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from("real-ish payload"),
+    ]);
+    const stored = await storage.saveUpload(upload(png, "avatar.png", "image/png"));
+    expect(storage.fileExists(stored.storedName)).toBe(true);
+    await storage.deleteStored(stored.storedName);
+  });
+
+  it("exposes the content check on its own", () => {
+    expect(storage.contentError("png", HTML_BYTES)).toMatch(/extension/i);
+    expect(
+      storage.contentError(
+        "png",
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      ),
+    ).toBeNull();
+    // Executables are refused whatever the extension says.
+    expect(storage.contentError("pdf", Buffer.from([0x4d, 0x5a, 0x90, 0x00]))).toMatch(
+      /executable/i,
+    );
+    expect(storage.contentError("txt", Buffer.from("#!/bin/sh\nrm -rf /\n"))).toMatch(
+      /script/i,
+    );
   });
 });
 

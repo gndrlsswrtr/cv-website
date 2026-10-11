@@ -170,27 +170,17 @@ describe("published filtering", () => {
 });
 
 /**
- * KNOWN BUG in `src/lib/crud.ts` → `listRows`:
+ * Admin search: `src/app/admin/[resource]/page.tsx` calls
+ * `adminList(resource, { q })` for the search box, which ends up here.
  *
- *   const clause = def.searchFields
- *     .map((field) => `${assertIdentifier(field)} LIKE $${params.length + 1} ...`)
- *
- * `params.length` is evaluated while the params array is still empty, so every
- * search field binds to the same `$1` placeholder — yet one parameter is pushed
- * per field, and PostgreSQL rejects the query: "bind message supplies N
- * parameters, but prepared statement requires 1". Every resource has ≥ 3 search
- * fields, so `listRows(key, { q })` never succeeds.
- *
- * This is user-facing: `src/app/admin/[resource]/page.tsx` calls
- * `adminList(resource, { q })` for the admin search box, which 500s on every
- * search.
- *
- * The tests below state the CORRECT behaviour and are marked `it.fails`, so
- * the suite stays green today and turns red the moment the bug is fixed —
- * at which point they should become ordinary `it`s.
+ * Every search field needs its own parameter index — binding them all to `$1`
+ * while pushing one value per field makes PostgreSQL reject the statement with
+ * "bind message supplies N parameters, but prepared statement requires 1",
+ * which 500s the search box for every resource (all of which have ≥ 3 search
+ * fields). These tests pin the fixed behaviour.
  */
-describe("search (listRows with q) — KNOWN BUG: every field binds to $1", () => {
-  it.fails("matches only the registered search fields", async () => {
+describe("search (listRows with q)", () => {
+  it("matches only the registered search fields", async () => {
     const tag = marker();
     await mustCreate("education", { institution: `${tag} Academy` });
     // `location` is deliberately NOT a search field for education.
@@ -204,7 +194,7 @@ describe("search (listRows with q) — KNOWN BUG: every field binds to $1", () =
     expect(hits[0]?.institution).toBe(`${tag} Academy`);
   });
 
-  it.fails("escapes LIKE wildcards so % only matches a literal percent sign", async () => {
+  it("escapes LIKE wildcards so % only matches a literal percent sign", async () => {
     const tag = marker();
     await mustCreate("education", { institution: `${tag}100%` });
     await mustCreate("education", { institution: `${tag}100x` });
@@ -214,7 +204,7 @@ describe("search (listRows with q) — KNOWN BUG: every field binds to $1", () =
     expect(hits[0]?.institution).toBe(`${tag}100%`);
   });
 
-  it.fails("returns nothing when nothing matches", async () => {
+  it("returns nothing when nothing matches", async () => {
     expect(await listRows("education", { q: marker() })).toEqual([]);
   });
 });
