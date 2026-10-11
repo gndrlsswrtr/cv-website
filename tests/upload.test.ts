@@ -26,7 +26,9 @@ const HTML_BYTES = Buffer.from(
 );
 
 function upload(bytes: Buffer, name: string, type: string): File {
-  return new File([bytes], name, { type });
+  // Copy into a plain ArrayBuffer-backed view: DOM lib's BlobPart does not
+  // accept Buffer's SharedArrayBuffer-typed generic.
+  return new File([new Uint8Array(bytes)], name, { type });
 }
 
 beforeAll(() => {
