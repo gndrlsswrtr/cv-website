@@ -9,7 +9,18 @@ import path from "node:path";
  * which looks the file up by database id (visitors never supply a path).
  */
 
-export const UPLOAD_ROOT = path.join(process.cwd(), "private", "uploads");
+/**
+ * Where uploaded files are written.
+ *
+ * Defaults to `private/uploads` (inside the project, never under `public/`).
+ * On Railway, point `UPLOAD_DIR` at a mounted volume — e.g. `/data/uploads` —
+ * so files survive redeploys. Relative paths resolve from the project root.
+ */
+export const UPLOAD_ROOT = (() => {
+  const configured = process.env.UPLOAD_DIR?.trim();
+  if (configured) return path.resolve(configured);
+  return path.join(process.cwd(), "private", "uploads");
+})();
 
 /** Extension → Content-Type. The client-declared MIME type is never trusted. */
 const MIME_BY_EXT: Record<string, string> = {

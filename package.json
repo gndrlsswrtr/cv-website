@@ -11,8 +11,8 @@
     "clean": "node -e \"require('node:fs').rmSync('.next',{recursive:true,force:true})\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:migrate": "node scripts/migrate.mjs",
-    "db:create-admin": "node scripts/create-admin.mjs"
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:create-admin": "tsx scripts/create-admin.ts"
   },
   "dependencies": {
     "next": "16.4.0",
