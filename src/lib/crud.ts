@@ -68,12 +68,17 @@ export async function listRows(key: ResourceKey, options: ListOptions = {}): Pro
     where.push(`"published" = true`);
   }
   if (options.q && def.searchFields.length > 0) {
+    // Each field needs its own parameter. `params.length` is captured before
+    // any are pushed, then offset by the field index — binding every field to
+    // `$1` while pushing N values makes PostgreSQL reject the statement.
+    const like = `%${escapeLike(options.q)}%`;
+    const offset = params.length;
     const clause = def.searchFields
-      .map((field) => `${assertIdentifier(field)} LIKE $${params.length + 1} ESCAPE '\\'`)
+      .map((field, index) => `${assertIdentifier(field)} LIKE $${offset + index + 1} ESCAPE '\\'`)
       .join(" OR ");
     where.push(`(${clause})`);
     for (let i = 0; i < def.searchFields.length; i += 1) {
-      params.push(`%${escapeLike(options.q)}%`);
+      params.push(like);
     }
   }
 

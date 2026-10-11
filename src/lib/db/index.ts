@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { Client, QueryResultRow } from "pg";
 
 import { ensureMigrated } from "./migrate";
-import { dbStatus, getPool, isDbConfigured } from "./pool";
+import { dbStatus, getPool } from "./pool";
 
 export { closePool, dbStatus, isDbConfigured, resetPool } from "./pool";
 

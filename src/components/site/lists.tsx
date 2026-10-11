@@ -20,7 +20,8 @@ function str(row: Row, key: string): string {
 }
 
 function dateRange(row: Row, currentLabel = "Present"): string {
-  const end = row.is_current === 1 ? "" : str(row, "end_date");
+  const current = row.is_current === true || row.is_current === 1;
+  const end = current ? "" : str(row, "end_date");
   return formatDateRange(str(row, "start_date"), end, currentLabel);
 }
 
