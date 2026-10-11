@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { logout } from "./actions";
 import { requireUser } from "@/lib/auth/session";
+import { countUnreadMessages } from "@/lib/contact";
 import { RESOURCE_KEYS, RESOURCES } from "@/lib/resources";
 
 /**
@@ -18,11 +19,14 @@ const NAV_SECTIONS = [
     href: `/admin/${key}`,
     label: RESOURCES[key].label,
   })),
+  { href: "/admin/inbox", label: "Inbox" },
   { href: "/admin/settings", label: "Profile & settings" },
 ];
 
+const INBOX_HREF = "/admin/inbox";
+
 export default async function AdminLayout({ children }: { children: ReactNode }) {
-  const user = await requireUser();
+  const [user, unread] = await Promise.all([requireUser(), countUnreadMessages()]);
 
   return (
     <div className="min-h-screen">
@@ -64,7 +68,25 @@ export default async function AdminLayout({ children }: { children: ReactNode })
               href={item.href}
               className="whitespace-nowrap rounded-md px-3 py-2 text-sm text-muted hover:bg-surface hover:text-foreground"
             >
-              {item.label}
+              <span className="flex items-center gap-2">
+                {item.label}
+                {item.href === INBOX_HREF && unread > 0 ? (
+                  <span
+                    aria-hidden="true"
+                    className="badge"
+                    style={{
+                      color: "var(--accent)",
+                      borderColor: "color-mix(in srgb, var(--accent) 45%, transparent)",
+                      backgroundColor: "color-mix(in srgb, var(--accent) 10%, transparent)",
+                    }}
+                  >
+                    {unread}
+                  </span>
+                ) : null}
+                {item.href === INBOX_HREF && unread > 0 ? (
+                  <span className="sr-only">{unread} unread</span>
+                ) : null}
+              </span>
             </Link>
           ))}
         </nav>
