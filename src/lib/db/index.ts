@@ -58,13 +58,19 @@ async function execQuery<T extends QueryResultRow>(
 }
 
 /** Run a parameterised SELECT and return every row (empty when unconfigured). */
-export async function all<T = Row>(sql: string, params: unknown[] = []): Promise<T[]> {
+export async function all<T extends QueryResultRow = Row>(
+  sql: string,
+  params: unknown[] = [],
+): Promise<T[]> {
   const res = await execQuery<T>(sql, params);
   return res.rows;
 }
 
 /** Run a parameterised SELECT and return the first row, or `undefined`. */
-export async function get<T = Row>(sql: string, params: unknown[] = []): Promise<T | undefined> {
+export async function get<T extends QueryResultRow = Row>(
+  sql: string,
+  params: unknown[] = [],
+): Promise<T | undefined> {
   const res = await execQuery<T>(sql, params);
   return res.rows[0];
 }
