@@ -45,7 +45,7 @@ export function readMigrationFiles(dir = MIGRATIONS_DIR): MigrationFile[] {
 
   return names.map((name) => ({
     name,
-    sql: fs.readFileSync(/* turbopackIgnore: true */ path.join(dir, name), "utf8"),
+    sql: fs.readFileSync(path.join(/* turbopackIgnore: true */ dir, name), "utf8"),
   }));
 }
 
