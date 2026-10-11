@@ -18,7 +18,10 @@ import path from "node:path";
  */
 export const UPLOAD_ROOT = (() => {
   const configured = process.env.UPLOAD_DIR?.trim();
-  if (configured) return path.resolve(configured);
+  // Runtime-configured by design: on Railway this points at a mounted volume,
+  // so the path cannot be resolved at build time. Opting out of Turbopack's
+  // static tracing keeps the whole project from being bundled into the output.
+  if (configured) return path.resolve(/* turbopackIgnore: true */ configured);
   return path.join(process.cwd(), "private", "uploads");
 })();
 
@@ -213,7 +216,11 @@ export async function saveUpload(file: File): Promise<StoredFile> {
 
   const storedName = `${crypto.randomUUID()}.${extensionOf(file.name)}`;
   fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
-  fs.writeFileSync(path.join(UPLOAD_ROOT, storedName), buffer, { flag: "wx" });
+  fs.writeFileSync(
+    path.join(/* turbopackIgnore: true */ UPLOAD_ROOT, storedName),
+    buffer,
+    { flag: "wx" },
+  );
 
   return {
     storedName,
