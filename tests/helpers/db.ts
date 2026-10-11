@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 
+import type { QueryResultRow } from "pg";
+
 import { getPool } from "@/lib/db/pool";
 
 /**
@@ -14,7 +16,7 @@ export function marker(): string {
 }
 
 /** Run SQL as the superuser/admin connection (bypasses RLS, as in production). */
-export async function adminQuery<T = Record<string, unknown>>(
+export async function adminQuery<T extends QueryResultRow = Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],
 ): Promise<T[]> {
@@ -28,7 +30,7 @@ export async function adminQuery<T = Record<string, unknown>>(
  * Run SQL as the `portfolio_public` role — the exact session a public page
  * opens. Anything not covered by an RLS policy is invisible here.
  */
-export async function publicQuery<T = Record<string, unknown>>(
+export async function publicQuery<T extends QueryResultRow = Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],
 ): Promise<T[]> {
