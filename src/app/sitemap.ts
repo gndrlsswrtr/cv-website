@@ -4,13 +4,16 @@ import { getPublished } from "@/lib/content";
 
 const STATIC_PATHS = [
   "/",
+  "/about",
   "/experience",
+  "/volunteer",
   "/education",
   "/skills",
   "/projects",
   "/achievements",
   "/certifications",
   "/documents",
+  "/contact",
 ];
 
 // Evaluated once at build time so the prerender does not see a live clock.
