@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { all, get, now, run } from "@/lib/db";
+import { all, get, now, run, withTransaction, type Row } from "@/lib/db";
 import {
   CHECKBOX_FIELDS,
   getResource,
@@ -15,12 +15,14 @@ import { deleteStored } from "@/lib/storage";
 /**
  * Generic, registry-driven data access.
  *
- * Column and table names are validated against a strict identifier pattern and
- * come only from the static resource registry; every value is bound as a
- * parameter. There is no string interpolation of user input anywhere here.
+ * Column and table names are validated against a strict identifier pattern,
+ * come only from the static resource registry, and are double-quoted (so a
+ * legitimate column named `date` cannot be read as a keyword). Every value is
+ * bound as a `$n` parameter. There is no interpolation of user input anywhere
+ * here.
  */
 
-export type Row = Record<string, string | number | null>;
+export type { Row };
 
 const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 
@@ -28,13 +30,17 @@ function assertIdentifier(name: string): string {
   if (!IDENTIFIER.test(name)) {
     throw new Error(`Unsafe SQL identifier: ${name}`);
   }
-  return name;
+  return `"${name}"`;
 }
 
 function tableFor(key: ResourceKey): string {
   const def = getResource(key);
   if (!def) throw new Error(`Unknown resource: ${key}`);
   return assertIdentifier(def.table);
+}
+
+function placeholders(count: number): string {
+  return Array.from({ length: count }, (_, index) => `$${index + 1}`).join(", ");
 }
 
 function escapeLike(input: string): string {
@@ -51,7 +57,7 @@ export type ListOptions = {
   limit?: number;
 };
 
-export function listRows(key: ResourceKey, options: ListOptions = {}): Row[] {
+export async function listRows(key: ResourceKey, options: ListOptions = {}): Promise<Row[]> {
   const def = getResource(key)!;
   const table = tableFor(key);
 
@@ -59,11 +65,11 @@ export function listRows(key: ResourceKey, options: ListOptions = {}): Row[] {
   const params: (string | number)[] = [];
 
   if (options.publishedOnly) {
-    where.push("published = 1");
+    where.push(`"published" = true`);
   }
   if (options.q && def.searchFields.length > 0) {
     const clause = def.searchFields
-      .map((field) => `${assertIdentifier(field)} LIKE ? ESCAPE '\\'`)
+      .map((field) => `${assertIdentifier(field)} LIKE $${params.length + 1} ESCAPE '\\'`)
       .join(" OR ");
     where.push(`(${clause})`);
     for (let i = 0; i < def.searchFields.length; i += 1) {
@@ -74,8 +80,8 @@ export function listRows(key: ResourceKey, options: ListOptions = {}): Row[] {
   const sql = [
     `SELECT * FROM ${table}`,
     where.length ? `WHERE ${where.join(" AND ")}` : "",
-    "ORDER BY sort_order ASC, created_at DESC",
-    options.limit ? "LIMIT ?" : "",
+    `ORDER BY "sort_order" ASC, "created_at" DESC`,
+    options.limit ? `LIMIT $${params.length + 1}` : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -84,23 +90,25 @@ export function listRows(key: ResourceKey, options: ListOptions = {}): Row[] {
   return all<Row>(sql, params);
 }
 
-export function findRow(key: ResourceKey, id: string): Row | undefined {
+export async function findRow(key: ResourceKey, id: string): Promise<Row | undefined> {
   const table = tableFor(key);
-  if (!/^[a-zA-Z0-9-]{1,64}$/.test(id)) return undefined;
-  return get<Row>(`SELECT * FROM ${table} WHERE id = ?`, [id]);
+  if (!/^[0-9a-fA-F-]{1,64}$/.test(id)) return undefined;
+  return get<Row>(`SELECT * FROM ${table} WHERE "id" = $1`, [id]);
 }
 
-export function countRows(key: ResourceKey, publishedOnly = false): number {
+export async function countRows(key: ResourceKey, publishedOnly = false): Promise<number> {
   const table = tableFor(key);
   const sql = publishedOnly
-    ? `SELECT COUNT(*) AS n FROM ${table} WHERE published = 1`
+    ? `SELECT COUNT(*) AS n FROM ${table} WHERE "published" = true`
     : `SELECT COUNT(*) AS n FROM ${table}`;
-  const row = get<{ n: number }>(sql);
+  const row = await get<{ n: string }>(sql);
   return Number(row?.n ?? 0);
 }
 
-export function rowCount(table: string): number {
-  const row = get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${assertIdentifier(table)}`);
+export async function rowCount(table: string): Promise<number> {
+  const row = await get<{ n: string }>(
+    `SELECT COUNT(*) AS n FROM ${assertIdentifier(table)}`,
+  );
   return Number(row?.n ?? 0);
 }
 
@@ -108,12 +116,15 @@ export function rowCount(table: string): number {
 /* Writes                                                              */
 /* ------------------------------------------------------------------ */
 
-function coerce(def: ResourceDef, values: Record<string, string>): Record<string, string | number> {
-  const out: Record<string, string | number> = {};
+function coerce(
+  def: ResourceDef,
+  values: Record<string, string>,
+): Record<string, string | number | boolean> {
+  const out: Record<string, string | number | boolean> = {};
   for (const field of def.fields) {
     const raw = values[field.name] ?? "";
     if (field.type === "checkbox") {
-      out[field.name] = raw === "1" || raw === "true" ? 1 : 0;
+      out[field.name] = raw === "1" || raw === "true";
     } else if (field.type === "number") {
       out[field.name] = raw === "" ? 0 : Number(raw);
     } else {
@@ -123,15 +134,17 @@ function coerce(def: ResourceDef, values: Record<string, string>): Record<string
   return out;
 }
 
-function uniqueSlug(table: string, base: string, excludeId?: string): string {
+async function uniqueSlug(table: string, base: string, excludeId?: string): Promise<string> {
   const root = base || "item";
   let candidate = root;
   let suffix = 2;
   for (;;) {
-    const existing = get<{ id: string }>(
-      `SELECT id FROM ${table} WHERE slug = ?${excludeId ? " AND id <> ?" : ""}`,
-      excludeId ? [candidate, excludeId] : [candidate],
-    );
+    const existing = excludeId
+      ? await get<{ id: string }>(
+          `SELECT "id" FROM ${table} WHERE "slug" = $1 AND "id" <> $2`,
+          [candidate, excludeId],
+        )
+      : await get<{ id: string }>(`SELECT "id" FROM ${table} WHERE "slug" = $1`, [candidate]);
     if (!existing) return candidate;
     candidate = `${root}-${suffix}`;
     suffix += 1;
@@ -143,11 +156,11 @@ export type CreateResult =
   | { ok: true; id: string; errors?: undefined }
   | { ok: false; errors: Record<string, string>; id?: undefined };
 
-export function createRow(
+export async function createRow(
   key: ResourceKey,
   rawValues: Record<string, string>,
   extra: Record<string, string | number> = {},
-): CreateResult {
+): Promise<CreateResult> {
   const def = getResource(key)!;
   const table = tableFor(key);
 
@@ -155,8 +168,9 @@ export function createRow(
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
   const values = coerce(def, rawValues);
+  const id = randomUUID();
   const columns: string[] = ["id", "created_at", "updated_at"];
-  const params: (string | number)[] = [randomUUID(), now(), now()];
+  const params: (string | number | boolean)[] = [id, now(), now()];
 
   for (const column of writableColumns(def)) {
     if (column === "published") continue; // handled below
@@ -164,11 +178,14 @@ export function createRow(
     if (column === "slug") {
       const base = slugify(rawValues.slug || rawValues.title || "");
       if (!base) {
-        return { ok: false, errors: { slug: "Could not derive a slug — enter one manually." } };
+        return {
+          ok: false,
+          errors: { slug: "Could not derive a slug — enter one manually." },
+        };
       }
-      params.push(uniqueSlug(table, base));
+      params.push(await uniqueSlug(table, base));
     } else {
-      params.push(values[column] ?? "");
+      params.push((values[column] ?? "") as string | number | boolean);
     }
   }
 
@@ -176,15 +193,11 @@ export function createRow(
   // declared default (documents default to draft because they often contain
   // personal data).
   const hasPublishedField = def.fields.some((field) => field.name === "published");
-  columns.push("published");
+  columns.push(`"published"`);
   params.push(
     hasPublishedField && rawValues.published !== undefined
       ? rawValues.published === "1"
-        ? 1
-        : 0
-      : def.defaultPublished
-        ? 1
-        : 0,
+      : def.defaultPublished,
   );
 
   for (const [column, value] of Object.entries(extra)) {
@@ -192,10 +205,11 @@ export function createRow(
     params.push(value);
   }
 
-  const placeholders = columns.map(() => "?").join(", ");
-  run(`INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})`, params);
+  await run(
+    `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders(params.length)})`,
+    params,
+  );
 
-  const id = String(params[0]);
   return { ok: true, id };
 }
 
@@ -203,94 +217,113 @@ export type UpdateResult =
   | { ok: true; id: string; errors?: undefined }
   | { ok: false; errors: Record<string, string>; id?: string };
 
-export function updateRow(
+export async function updateRow(
   key: ResourceKey,
   id: string,
   rawValues: Record<string, string>,
   extra: Record<string, string | number> = {},
   /** Pass `undefined` to leave `published` untouched (e.g. no checkbox in form). */
   published?: boolean,
-): UpdateResult {
+): Promise<UpdateResult> {
   const def = getResource(key)!;
   const table = tableFor(key);
-  const existing = findRow(key, id);
+  const existing = await findRow(key, id);
   if (!existing) return { ok: false, errors: { _: "Entry not found." }, id };
 
   const errors = validateValues(def, rawValues);
   if (Object.keys(errors).length > 0) return { ok: false, errors, id };
 
   const values = coerce(def, rawValues);
-  const sets: string[] = ["updated_at = ?"];
-  const params: (string | number)[] = [now()];
+  const sets: string[] = [`"updated_at" = $1`];
+  const params: (string | number | boolean)[] = [now()];
 
   for (const column of writableColumns(def)) {
     if (column === "published") continue; // handled below
-    sets.push(`${assertIdentifier(column)} = ?`);
+    sets.push(`${assertIdentifier(column)} = $${params.length + 1}`);
     if (column === "slug") {
       const base = slugify(rawValues.slug || rawValues.title || "");
       if (!base) {
-        return { ok: false, errors: { slug: "Could not derive a slug — enter one manually." }, id };
+        return {
+          ok: false,
+          errors: { slug: "Could not derive a slug — enter one manually." },
+          id,
+        };
       }
-      params.push(uniqueSlug(table, base, id));
+      params.push(await uniqueSlug(table, base, id));
     } else {
-      params.push(values[column] ?? "");
+      params.push((values[column] ?? "") as string | number | boolean);
     }
   }
 
   if (published !== undefined) {
-    sets.push("published = ?");
-    params.push(published ? 1 : 0);
+    sets.push(`"published" = $${params.length + 1}`);
+    params.push(published);
   }
 
   for (const [column, value] of Object.entries(extra)) {
-    sets.push(`${assertIdentifier(column)} = ?`);
+    sets.push(`${assertIdentifier(column)} = $${params.length + 1}`);
     params.push(value);
   }
 
   params.push(id);
-  run(`UPDATE ${table} SET ${sets.join(", ")} WHERE id = ?`, params);
+  await run(`UPDATE ${table} SET ${sets.join(", ")} WHERE "id" = $${params.length}`, params);
   return { ok: true, id };
 }
 
-export function deleteRow(key: ResourceKey, id: string): void {
+export async function deleteRow(key: ResourceKey, id: string): Promise<void> {
   const table = tableFor(key);
-  const existing = findRow(key, id);
+  const existing = await findRow(key, id);
   if (!existing) return;
 
-  run(`DELETE FROM ${table} WHERE id = ?`, [id]);
+  await run(`DELETE FROM ${table} WHERE "id" = $1`, [id]);
 
   if (key === "documents") {
-    run("UPDATE profile SET avatar_id = NULL WHERE avatar_id = ?", [id]);
+    await run(`UPDATE profile SET "avatar_id" = NULL WHERE "avatar_id" = $1`, [id]);
     deleteStored(String(existing.stored_name ?? ""));
   }
 }
 
-export function setPublished(key: ResourceKey, id: string, published: boolean): void {
+export async function setPublished(
+  key: ResourceKey,
+  id: string,
+  published: boolean,
+): Promise<void> {
   const table = tableFor(key);
-  run(`UPDATE ${table} SET published = ?, updated_at = ? WHERE id = ?`, [
-    published ? 1 : 0,
+  await run(`UPDATE ${table} SET "published" = $1, "updated_at" = $2 WHERE "id" = $3`, [
+    published,
     now(),
     id,
   ]);
 }
 
 /** Swaps an entry with its neighbour, rewriting both sort orders. */
-export function moveRow(key: ResourceKey, id: string, direction: "up" | "down"): void {
+export async function moveRow(
+  key: ResourceKey,
+  id: string,
+  direction: "up" | "down",
+): Promise<void> {
   const table = tableFor(key);
-  const ids = all<{ id: string }>(
-    `SELECT id FROM ${table} ORDER BY sort_order ASC, created_at DESC`,
-  ).map((r) => r.id);
 
-  const index = ids.indexOf(id);
-  if (index < 0) return;
-  const target = direction === "up" ? index - 1 : index + 1;
-  if (target < 0 || target >= ids.length) return;
+  await withTransaction(async () => {
+    const ids = (
+      await all<{ id: string }>(
+        `SELECT "id" FROM ${table} ORDER BY "sort_order" ASC, "created_at" DESC`,
+      )
+    ).map((r) => r.id);
 
-  [ids[index], ids[target]] = [ids[target], ids[index]];
+    const index = ids.indexOf(id);
+    if (index < 0) return;
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (target < 0 || target >= ids.length) return;
 
-  // Normalise so ordering stays dense and deterministic.
-  ids.forEach((rowId, position) => {
-    run(`UPDATE ${table} SET sort_order = ? WHERE id = ?`, [position + 1, rowId]);
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+
+    // Normalise so ordering stays dense and deterministic.
+    let position = 1;
+    for (const rowId of ids) {
+      await run(`UPDATE ${table} SET "sort_order" = $1 WHERE "id" = $2`, [position, rowId]);
+      position += 1;
+    }
   });
 }
 
@@ -328,12 +361,12 @@ export const EMPTY_PROFILE: ProfileRow = {
   avatar_id: null,
 };
 
-export function readProfile(): ProfileRow {
-  const row = get<ProfileRow>("SELECT * FROM profile WHERE id = 1");
+export async function readProfile(): Promise<ProfileRow> {
+  const row = await get<Partial<ProfileRow>>(`SELECT * FROM profile WHERE "id" = 1`);
   return row ? { ...EMPTY_PROFILE, ...row } : { ...EMPTY_PROFILE };
 }
 
-export function saveProfile(values: Record<string, string>): void {
+export async function saveProfile(values: Record<string, string>): Promise<void> {
   const columns: (keyof ProfileRow)[] = [
     "full_name",
     "headline",
@@ -348,29 +381,28 @@ export function saveProfile(values: Record<string, string>): void {
     "footer_note",
   ];
 
-  const sets = columns.map((c) => `${assertIdentifier(String(c))} = ?`);
+  const quoted = columns.map((c) => assertIdentifier(String(c)));
+  // The same $1..$n parameters feed both the INSERT values and the UPDATE set,
+  // which is exactly what `ON CONFLICT ... DO UPDATE` expects.
+  const updateSet = quoted.map((c, index) => `${c} = $${index + 1}`).join(", ");
+
   const params: (string | number)[] = columns.map((c) => values[c] ?? "");
-  sets.push("updated_at = ?");
   params.push(now());
 
-  const exists = get<{ id: number }>("SELECT id FROM profile WHERE id = 1");
-  if (exists) {
-    run(`UPDATE profile SET ${sets.join(", ")} WHERE id = 1`, params);
-  } else {
-    run(
-      `INSERT INTO profile (id, ${columns.join(", ")}, updated_at)
-       VALUES (1, ${columns.map(() => "?").join(", ")}, ?)`,
-      [1, ...params.slice(0, columns.length), now()],
-    );
-  }
+  await run(
+    `INSERT INTO profile ("id", ${quoted.join(", ")}, "updated_at")
+     VALUES (1, ${placeholders(columns.length)}, $${columns.length + 1})
+     ON CONFLICT ("id") DO UPDATE SET ${updateSet}, "updated_at" = EXCLUDED."updated_at"`,
+    params,
+  );
 }
 
-export function setAvatar(documentId: string | null): void {
-  const exists = get<{ id: number }>("SELECT id FROM profile WHERE id = 1");
-  if (!exists) {
-    run("INSERT INTO profile (id, updated_at) VALUES (1, ?)", [now()]);
-  }
-  run("UPDATE profile SET avatar_id = ?, updated_at = ? WHERE id = 1", [documentId, now()]);
+export async function setAvatar(documentId: string | null): Promise<void> {
+  await run(
+    `INSERT INTO profile ("id", "avatar_id", "updated_at") VALUES (1, $1, now())
+     ON CONFLICT ("id") DO UPDATE SET "avatar_id" = EXCLUDED."avatar_id", "updated_at" = now()`,
+    [documentId],
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -378,7 +410,9 @@ export function setAvatar(documentId: string | null): void {
 /* ------------------------------------------------------------------ */
 
 export function isChecked(fieldName: string, value: unknown): boolean {
-  if (CHECKBOX_FIELDS.has(fieldName)) return value === 1 || value === "1";
+  if (CHECKBOX_FIELDS.has(fieldName)) {
+    return value === 1 || value === "1" || value === true;
+  }
   return Boolean(value);
 }
 
@@ -387,8 +421,16 @@ export function rowToValues(def: ResourceDef, row: Row): Record<string, string> 
   const values: Record<string, string> = {};
   for (const field of def.fields) {
     const raw = row[field.name];
-    values[field.name] = raw === null || raw === undefined ? "" : String(raw);
+    if (raw === null || raw === undefined) {
+      values[field.name] = "";
+    } else if (field.type === "checkbox") {
+      values[field.name] = raw === true || raw === 1 || raw === "1" ? "1" : "0";
+    } else {
+      values[field.name] = String(raw);
+    }
   }
-  if (def.hasSlug) values.slug = row.slug === null || row.slug === undefined ? "" : String(row.slug);
+  if (def.hasSlug) {
+    values.slug = row.slug === null || row.slug === undefined ? "" : String(row.slug);
+  }
   return values;
 }
