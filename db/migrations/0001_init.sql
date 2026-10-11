@@ -6,8 +6,9 @@
 --
 -- Every statement here is idempotent so the migration can be re-run safely.
 
--- gen_random_uuid() is built in from PostgreSQL 13.
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- `gen_random_uuid()` is built into PostgreSQL 13+, so no extension is needed —
+-- deliberately, because `CREATE EXTENSION` often requires superuser rights that
+-- a managed database does not grant.
 
 /* ------------------------------------------------------------------ */
 /* Accounts & sessions                                                 */
