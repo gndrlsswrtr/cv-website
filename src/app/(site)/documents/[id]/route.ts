@@ -24,10 +24,10 @@ function contentDisposition(filename: string, inline: boolean): string {
 
 export async function GET(request: Request, { params }: RouteContext) {
   const { id } = await params;
-  const row = id ? findRow("documents", id) : undefined;
+  const row = id ? await findRow("documents", id) : undefined;
   if (!row) return new Response("Not found", { status: 404 });
 
-  const published = row.published === 1;
+  const published = row.published === true;
   if (!published) {
     const user = await requireUserOrNull();
     if (!user) return new Response("Not found", { status: 404 });
