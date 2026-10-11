@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 
 import { PasswordForm } from "@/components/admin/PasswordForm";
 import { ProfileForm } from "@/components/admin/ProfileForm";
+import { SiteSettingsForm } from "@/components/admin/SiteSettingsForm";
+import { SocialLinksForm } from "@/components/admin/SocialLinksForm";
 import { requireUser } from "@/lib/auth/session";
 import { adminProfile } from "@/lib/content";
 import { findRow } from "@/lib/crud";
+import { FEATURED_SECTIONS, readSettings, readSocialLinks } from "@/lib/settings";
 
 export const instant = false;
 
@@ -15,7 +18,11 @@ export const metadata: Metadata = {
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const profile = await adminProfile();
+  const [profile, settings, links] = await Promise.all([
+    adminProfile(),
+    readSettings(),
+    readSocialLinks(),
+  ]);
 
   const avatarRow = profile.avatar_id
     ? await findRow("documents", profile.avatar_id)
@@ -83,6 +90,36 @@ export default async function SettingsPage() {
         </div>
         <div className="card px-5 py-6 sm:px-6">
           <PasswordForm />
+        </div>
+      </section>
+
+      <section aria-labelledby="site-settings-heading" className="grid gap-6">
+        <div>
+          <h2 id="site-settings-heading" className="text-lg font-semibold">
+            Site settings
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            The title and description search engines and social previews use, plus which home-page
+            sections appear — and how visitors can reach you.
+          </p>
+        </div>
+        <div className="card px-5 py-6 sm:px-6">
+          <SiteSettingsForm settings={settings} sections={FEATURED_SECTIONS} />
+        </div>
+      </section>
+
+      <section aria-labelledby="social-links-heading" className="grid gap-6">
+        <div>
+          <h2 id="social-links-heading" className="text-lg font-semibold">
+            Social links
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            These appear in the site footer, in the order they are filled in. Leave a field blank to
+            hide that link.
+          </p>
+        </div>
+        <div className="card px-5 py-6 sm:px-6">
+          <SocialLinksForm links={links} />
         </div>
       </section>
     </div>
