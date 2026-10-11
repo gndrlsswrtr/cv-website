@@ -55,13 +55,15 @@ const BOOTSTRAP = `
 export async function ensureMigrated(): Promise<void> {
   if (process.env.AUTO_MIGRATE === "false") return;
   if (!migrationPromise) {
-    migrationPromise = applyMigrations().catch((error) => {
-      // Allow the next caller to retry instead of caching the failure forever.
-      migrationPromise = null;
-      throw error;
-    });
+    migrationPromise = applyMigrations()
+      .then(() => undefined)
+      .catch((error) => {
+        // Allow the next caller to retry instead of caching the failure forever.
+        migrationPromise = null;
+        throw error;
+      });
   }
-  return migrationPromise;
+  await migrationPromise;
 }
 
 /** Test helper — forget the memoised result. */
@@ -70,7 +72,7 @@ export function resetMigrationMemo(): void {
 }
 
 export async function applyMigrations(dir = MIGRATIONS_DIR): Promise<string[]> {
-  const pool = getPool();
+  const pool = await getPool();
   if (!pool) return []; // No DATABASE_URL: nothing to migrate.
 
   const files = readMigrationFiles(dir);
