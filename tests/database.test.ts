@@ -106,8 +106,8 @@ describe("row level security", () => {
     await expect(publicQuery("SELECT * FROM sessions")).rejects.toThrow(/permission denied/);
 
     // Sanity check that the same role can read what it is meant to.
-    const experience = await publicQuery("SELECT 1 AS ok FROM experience");
-    expect(experience).toEqual([{ ok: 1 }]);
+    const profile = await publicQuery<{ ok: number }>("SELECT 1 AS ok FROM profile");
+    expect(profile).toEqual([{ ok: 1 }]);
   });
 
   it("hides unpublished documents from the public role", async () => {
