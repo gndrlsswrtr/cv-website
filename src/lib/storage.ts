@@ -261,5 +261,5 @@ export function deleteStored(storedName: string): void {
 
 export function fileExists(storedName: string): boolean {
   const full = resolveStoredPath(storedName);
-  return full ? fs.existsSync(full) : false;
+  return full ? fs.existsSync(/* turbopackIgnore: true */ full) : false;
 }

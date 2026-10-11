@@ -24,20 +24,28 @@ let migrationPromise: Promise<void> | null = null;
 
 export type MigrationFile = { name: string; sql: string };
 
+/**
+ * Reads `db/migrations/*.sql` in filename order.
+ *
+ * The directory is statically scoped to a subfolder of the project root, and
+ * reading it is deliberate — but Turbopack cannot prove that from a defaulted
+ * parameter, so each call opts out of whole-project tracing. Without this the
+ * bundler inlines every source file into the server output.
+ */
 export function readMigrationFiles(dir = MIGRATIONS_DIR): MigrationFile[] {
-  if (!fs.existsSync(dir)) {
+  if (!fs.existsSync(/* turbopackIgnore: true */ dir)) {
     throw new Error(
       `No migrations directory at ${dir}. Expected db/migrations/*.sql in the project root.`,
     );
   }
   const names = fs
-    .readdirSync(dir)
+    .readdirSync(/* turbopackIgnore: true */ dir)
     .filter((name) => name.toLowerCase().endsWith(".sql"))
     .sort((a, b) => a.localeCompare(b, "en"));
 
   return names.map((name) => ({
     name,
-    sql: fs.readFileSync(path.join(dir, name), "utf8"),
+    sql: fs.readFileSync(/* turbopackIgnore: true */ path.join(dir, name), "utf8"),
   }));
 }
 
