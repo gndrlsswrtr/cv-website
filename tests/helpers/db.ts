@@ -52,8 +52,13 @@ export async function publicQuery<T = Record<string, unknown>>(
 
 /** Wipe every content row so suites stay independent. */
 export async function resetContent(): Promise<void> {
+  // `DELETE`, not `TRUNCATE ... CASCADE`: profile.avatar_id has a foreign key
+  // to documents, and a cascading truncate would silently empty the profile
+  // row too.
+  await adminQuery(`UPDATE profile SET avatar_id = NULL`);
   await adminQuery(
-    `TRUNCATE experience, education, skills, projects, achievements,
-             certifications, documents, sessions RESTART IDENTITY CASCADE`,
+    `DELETE FROM experience; DELETE FROM education; DELETE FROM skills;
+     DELETE FROM projects; DELETE FROM achievements;
+     DELETE FROM certifications; DELETE FROM documents;`,
   );
 }

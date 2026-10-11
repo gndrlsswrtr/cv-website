@@ -99,12 +99,15 @@ describe("row level security", () => {
     expect(asAdmin).toHaveLength(2);
   });
 
-  it("never exposes password hashes or session tokens to the public role", async () => {
-    const users = await publicQuery("SELECT * FROM users");
-    expect(users).toEqual([]);
+  it("cannot even open the users or sessions table", async () => {
+    // Stronger than an empty result: RLS is enabled and no SELECT grant was
+    // ever issued to `portfolio_public`, so the statement is refused outright.
+    await expect(publicQuery("SELECT * FROM users")).rejects.toThrow(/permission denied/);
+    await expect(publicQuery("SELECT * FROM sessions")).rejects.toThrow(/permission denied/);
 
-    const sessions = await publicQuery("SELECT * FROM sessions");
-    expect(sessions).toEqual([]);
+    // Sanity check that the same role can read what it is meant to.
+    const experience = await publicQuery("SELECT 1 AS ok FROM experience");
+    expect(experience).toEqual([{ ok: 1 }]);
   });
 
   it("hides unpublished documents from the public role", async () => {
