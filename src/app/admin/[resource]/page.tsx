@@ -6,6 +6,7 @@ import { ConfirmSubmit } from "@/components/admin/ConfirmSubmit";
 import { adminList } from "@/lib/content";
 import { formatBytes, formatDate, formatDateRange } from "@/lib/format";
 import { getResource, isResourceKey, type ResourceDef } from "@/lib/resources";
+import type { Row } from "@/lib/crud";
 
 export const instant = false;
 
@@ -21,7 +22,7 @@ const SUBTITLE_FIELDS = [
   "credential_id",
 ];
 
-function subtitleFor(def: ResourceDef, row: Record<string, string | number | null>): string {
+function subtitleFor(def: ResourceDef, row: Row): string {
   const parts: string[] = [];
   for (const field of SUBTITLE_FIELDS) {
     const value = row[field];
@@ -31,7 +32,7 @@ function subtitleFor(def: ResourceDef, row: Record<string, string | number | nul
   if (def.key === "experience") {
     const range = formatDateRange(
       String(row.start_date ?? ""),
-      row.is_current === 1 ? "" : String(row.end_date ?? ""),
+      row.is_current === true ? "" : String(row.end_date ?? ""),
       "Present",
     );
     if (range) parts.push(range);
@@ -78,7 +79,7 @@ export default async function ResourceListPage({ params, searchParams }: Props) 
 
   const def = getResource(resource)!;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
-  const rows = adminList(resource, q ? { q } : {});
+  const rows = await adminList(resource, q ? { q } : {});
   const flash = typeof sp.saved === "string" ? "saved" : typeof sp.deleted === "string" ? "deleted" : null;
 
   return (
@@ -160,7 +161,7 @@ export default async function ResourceListPage({ params, searchParams }: Props) 
         <ul className="card divide-y divide-border">
           {rows.map((row, index) => {
             const id = String(row.id);
-            const published = row.published === 1;
+            const published = row.published === true;
             const title = String(row[def.titleField] ?? "(untitled)");
 
             return (

@@ -17,7 +17,7 @@ async function load(params: Props["params"]) {
   if (!isResourceKey(resource)) return null;
 
   const def = getResource(resource)!;
-  const row = adminFind(resource, id);
+  const row = await adminFind(resource, id);
   if (!row) return null;
 
   return { def, row };
