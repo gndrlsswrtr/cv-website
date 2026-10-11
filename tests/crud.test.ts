@@ -196,12 +196,15 @@ describe("search (listRows with q)", () => {
 
   it("escapes LIKE wildcards so % only matches a literal percent sign", async () => {
     const tag = marker();
+    await mustCreate("education", { institution: `${tag}%` });
     await mustCreate("education", { institution: `${tag}100%` });
-    await mustCreate("education", { institution: `${tag}100x` });
+    await mustCreate("education", { institution: `${tag}x` });
 
+    // With `%` treated as a wildcard this would return every row containing
+    // the tag; escaped, it matches only the one that really ends in a percent.
     const hits = await listRows("education", { q: `${tag}%` });
     expect(hits).toHaveLength(1);
-    expect(hits[0]?.institution).toBe(`${tag}100%`);
+    expect(hits[0]?.institution).toBe(`${tag}%`);
   });
 
   it("returns nothing when nothing matches", async () => {

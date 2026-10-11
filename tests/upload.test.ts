@@ -161,7 +161,12 @@ describe("saveUpload", () => {
   });
 
   it("exposes the content check on its own", () => {
-    expect(storage.contentError("png", HTML_BYTES)).toMatch(/extension/i);
+    // Text bytes claiming to be a PNG: right container, wrong content.
+    expect(storage.contentError("png", Buffer.from("plain text pretending to be a png"))).toMatch(
+      /extension/i,
+    );
+    // HTML is caught by the blanket markup rule, whichever extension it claims.
+    expect(storage.contentError("png", HTML_BYTES)).toMatch(/HTML/i);
     expect(
       storage.contentError(
         "png",
