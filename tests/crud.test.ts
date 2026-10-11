@@ -288,6 +288,11 @@ describe("defaultPublished", () => {
       const def = getResource(key)!;
       const values: Record<string, string> = {};
       for (const field of def.fields) {
+        if (field.name === "published") {
+          // Deliberately omitted: `createRow` lets an explicit form value win
+          // over the declared default, and this test is about the default.
+          continue;
+        }
         if (field.required) {
           values[field.name] = `${tag} ${field.label}`;
         } else if (field.type === "select" && field.options && field.options.length > 0) {
