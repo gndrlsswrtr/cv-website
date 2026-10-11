@@ -1,16 +1,13 @@
 import Link from "next/link";
 import { cacheLife, cacheTag } from "next/cache";
 
-import { CONTENT_TAG } from "@/lib/content";
+import { CONTENT_TAG, getSocialLinks } from "@/lib/content";
 
 type FooterProfile = {
   full_name: string;
   footer_note: string;
   email: string;
   website: string;
-  linkedin: string;
-  github: string;
-  x_url: string;
 };
 
 function labelFor(href: string, fallback: string): string {
@@ -25,25 +22,35 @@ function labelFor(href: string, fallback: string): string {
 /**
  * Cached (and tagged like the rest of the public site) so the year can be
  * read at render time without making the layout request-dependent.
+ *
+ * Links come from the `social_links` table rather than columns on the profile:
+ * the owner adds or removes platforms in Settings without a schema change, and
+ * unpublished rows never reach this component because the read runs as the
+ * `portfolio_public` role.
  */
 export async function SiteFooter({ profile }: { profile: FooterProfile }) {
   "use cache";
   cacheTag(CONTENT_TAG);
   cacheLife("minutes");
 
-  const links: { href: string; label: string }[] = [];
+  const socialLinks = await getSocialLinks();
+
+  type FooterLink = { href: string; label: string; external: boolean };
+  const links: FooterLink[] = [];
 
   if (profile.website) {
-    links.push({ href: profile.website, label: labelFor(profile.website, "Website") });
+    links.push({
+      href: profile.website,
+      label: labelFor(profile.website, "Website"),
+      external: true,
+    });
   }
-  if (profile.linkedin) {
-    links.push({ href: profile.linkedin, label: "LinkedIn" });
-  }
-  if (profile.github) {
-    links.push({ href: profile.github, label: "GitHub" });
-  }
-  if (profile.x_url) {
-    links.push({ href: profile.x_url, label: "X" });
+  for (const link of socialLinks) {
+    links.push({
+      href: link.url,
+      label: link.label,
+      external: !link.url.startsWith("mailto:"),
+    });
   }
 
   const name = profile.full_name.trim() || "Portfolio";
@@ -69,10 +76,9 @@ export async function SiteFooter({ profile }: { profile: FooterProfile }) {
           <div className="flex flex-wrap gap-x-4 gap-y-2">
             {links.map((link) => (
               <a
-                key={link.href}
+                key={`${link.href}:${link.label}`}
                 href={link.href}
-                target="_blank"
-                rel="noreferrer noopener"
+                {...(link.external ? { target: "_blank", rel: "noreferrer noopener" } : {})}
                 className="text-muted hover:text-accent"
               >
                 {link.label}
