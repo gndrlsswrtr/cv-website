@@ -10,6 +10,21 @@ import type { Pool } from "pg";
 let pool: Pool | null = null;
 let poolKey = "";
 let missingReason: string | null = null;
+let normalisedTypes = false;
+
+/**
+ * `"2026-10-11 19:00:00.123+00"` → `"2026-10-11T19:00:00.123+00:00"` → ISO.
+ * Postgres emits a space separator and a colon-less offset, neither of which
+ * `Date` parses reliably across engines, so both are fixed up first.
+ */
+function toIso(value: string): string {
+  const candidate = value
+    .trim()
+    .replace(" ", "T")
+    .replace(/([+-]\d{2})$/, "$1:00");
+  const parsed = new Date(candidate);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+}
 
 function resolveUrl(): string | null {
   const raw = process.env.DATABASE_URL?.trim();
@@ -47,7 +62,23 @@ export async function getPool(): Promise<Pool | null> {
     pool = null;
   }
 
-  const { Pool: PgPool } = await import("pg");
+  const { Pool: PgPool, types } = await import("pg");
+
+  /**
+   * Normalise driver types so rows look exactly like the ones the rest of the
+   * app expects (and stay plain JSON for `'use cache'`):
+   *
+   * - `timestamptz` / `timestamp` → ISO-8601 string, not a `Date` object.
+   * - `bigint` → `number`. Every bigint we store is a byte size or a count,
+   *   nowhere near Number.MAX_SAFE_INTEGER.
+   */
+  if (!normalisedTypes) {
+    types.setTypeParser(1184, (value: string) => toIso(value));
+    types.setTypeParser(1114, (value: string) => toIso(value));
+    types.setTypeParser(20, (value: string) => Number(value));
+    normalisedTypes = true;
+  }
+
   const wantsSsl = process.env.DATABASE_SSL === "true";
   const wantsNoSsl = process.env.DATABASE_SSL === "false";
 

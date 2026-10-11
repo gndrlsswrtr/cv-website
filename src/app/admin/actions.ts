@@ -84,8 +84,8 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
     return { error: "Enter your email and password." };
   }
 
-  const user = get<{ id: string; password_hash: string }>(
-    "SELECT id, password_hash FROM users WHERE email = ?",
+  const user = await get<{ id: string; password_hash: string }>(
+    "SELECT id, password_hash FROM users WHERE email = $1",
     [email],
   );
 
@@ -129,13 +129,13 @@ export async function setupAdmin(_prev: FormState, formData: FormData): Promise<
     return { error: "Please fix the highlighted fields.", fieldErrors: errors };
   }
 
-  run(
+  await run(
     `INSERT INTO users (id, email, name, password_hash, role, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'admin', ?, ?)`,
+     VALUES ($1, $2, $3, $4, 'admin', $5, $6)`,
     [randomUUID(), email, name, hashPassword(password), now(), now()],
   );
 
-  const user = get<{ id: string }>("SELECT id FROM users WHERE email = ?", [email]);
+  const user = await get<{ id: string }>("SELECT id FROM users WHERE email = $1", [email]);
   if (!user) return { error: "Could not create the account. Please retry." };
 
   await createSession(user.id);
@@ -149,8 +149,8 @@ export async function changePassword(_prev: FormState, formData: FormData): Prom
   const next = String(formData.get("new_password") ?? "");
   const confirm = String(formData.get("confirm_password") ?? "");
 
-  const row = get<{ password_hash: string }>(
-    "SELECT password_hash FROM users WHERE id = ?",
+  const row = await get<{ password_hash: string }>(
+    "SELECT password_hash FROM users WHERE id = $1",
     [user.id],
   );
   if (!row || !verifyPassword(current, row.password_hash)) {
@@ -161,14 +161,14 @@ export async function changePassword(_prev: FormState, formData: FormData): Prom
   if (strength) return { error: strength };
   if (next !== confirm) return { error: "New passwords do not match." };
 
-  run("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", [
+  await run("UPDATE users SET password_hash = $1, updated_at = $2 WHERE id = $3", [
     hashPassword(next),
     now(),
     user.id,
   ]);
 
   // Changing the password invalidates every session, then re-establishes this one.
-  run("DELETE FROM sessions WHERE user_id = ?", [user.id]);
+  await run("DELETE FROM sessions WHERE user_id = $1", [user.id]);
   await createSession(user.id);
 
   return { ok: true, error: undefined };
@@ -218,7 +218,7 @@ export async function createResource(_prev: FormState, formData: FormData): Prom
     }
   }
 
-  const result = createRow(key, values, extra);
+  const result = await createRow(key, values, extra);
   if (!result.ok) {
     return { error: "Please fix the highlighted fields.", fieldErrors: result.errors };
   }
@@ -235,7 +235,7 @@ export async function updateResource(_prev: FormState, formData: FormData): Prom
   const { key, def } = loaded;
 
   const id = text(formData, "__id");
-  const existing = findRow(key, id);
+  const existing = await findRow(key, id);
   if (!existing) return { error: "That entry no longer exists." };
 
   const values = readValues(def, formData);
@@ -262,7 +262,7 @@ export async function updateResource(_prev: FormState, formData: FormData): Prom
     }
   }
 
-  const result = updateRow(key, id, values, extra, published);
+  const result = await updateRow(key, id, values, extra, published);
   if (!result.ok) {
     return { error: "Please fix the highlighted fields.", fieldErrors: result.errors };
   }
@@ -292,7 +292,7 @@ export async function deleteResource(formData: FormData): Promise<void> {
   const { key } = loaded;
 
   const id = text(formData, "__id");
-  deleteRow(key, id);
+  await deleteRow(key, id);
   updateTag(CONTENT_TAG);
   redirect(backToList(formData, `/admin/${key}?deleted=1`));
 }
@@ -305,10 +305,10 @@ export async function togglePublish(formData: FormData): Promise<void> {
   const { key } = loaded;
 
   const id = text(formData, "__id");
-  const row = findRow(key, id);
+  const row = await findRow(key, id);
   if (!row) return;
 
-  setPublished(key, id, row.published !== 1);
+  await setPublished(key, id, !row.published);
   updateTag(CONTENT_TAG);
   redirect(backToList(formData, `/admin/${key}`));
 }
@@ -322,7 +322,7 @@ export async function moveItem(formData: FormData): Promise<void> {
 
   const id = text(formData, "__id");
   const direction = text(formData, "__dir") === "up" ? "up" : "down";
-  moveRow(key, id, direction);
+  await moveRow(key, id, direction);
   updateTag(CONTENT_TAG);
   redirect(backToList(formData, `/admin/${key}`));
 }
@@ -379,10 +379,10 @@ export async function saveProfileAction(_prev: FormState, formData: FormData): P
   if (avatar instanceof File && avatar.size > 0) {
     try {
       const stored = await saveUpload(avatar);
-      const previousAvatar = readProfile().avatar_id;
-      if (previousAvatar) deleteRow("documents", previousAvatar);
+      const previousAvatar = (await readProfile()).avatar_id;
+      if (previousAvatar) await deleteRow("documents", previousAvatar);
 
-      const created = createRow(
+      const created = await createRow(
         "documents",
         {
           title: values.full_name ? `${values.full_name} — profile photo` : "Profile photo",
@@ -403,19 +403,19 @@ export async function saveProfileAction(_prev: FormState, formData: FormData): P
         deleteStored(stored.storedName);
         return { error: "Could not store the profile photo." };
       }
-      setAvatar(created.id);
+      await setAvatar(created.id);
     } catch (error) {
       return { error: error instanceof Error ? error.message : "Upload failed." };
     }
   }
 
   if (formData.get("remove_avatar")) {
-    const current = readProfile().avatar_id;
-    if (current) deleteRow("documents", current);
-    setAvatar(null);
+    const current = (await readProfile()).avatar_id;
+    if (current) await deleteRow("documents", current);
+    await setAvatar(null);
   }
 
-  saveProfile(values);
+  await saveProfile(values);
   updateTag(CONTENT_TAG);
   return { ok: true };
 }
@@ -521,13 +521,13 @@ export async function loadSampleContent(formData: FormData): Promise<void> {
   for (const [key, rows] of Object.entries(SAMPLES) as [ResourceKey, SampleRow[]][]) {
     const table = getResource(key)?.table;
     if (!table) continue;
-    const existing = get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`);
+    const existing = await get<{ n: string }>(`SELECT COUNT(*) AS n FROM "${table}"`);
     if (Number(existing?.n ?? 0) > 0) continue;
 
     for (const row of rows) {
       const values: Record<string, string> = {};
       for (const [column, value] of Object.entries(row)) values[column] = String(value);
-      const result = createRow(key, values, {});
+      const result = await createRow(key, values, {});
       if (!result.ok) break;
     }
     touched.push(key);

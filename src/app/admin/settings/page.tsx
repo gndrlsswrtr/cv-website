@@ -15,10 +15,10 @@ export const metadata: Metadata = {
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const profile = adminProfile();
+  const profile = await adminProfile();
 
   const avatarRow = profile.avatar_id
-    ? findRow("documents", profile.avatar_id)
+    ? await findRow("documents", profile.avatar_id)
     : undefined;
   const avatar = avatarRow
     ? {

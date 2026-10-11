@@ -23,8 +23,7 @@ export default async function AdminDashboardPage({
   const params = await searchParams;
   const sample = typeof params.sample === "string" ? params.sample : null;
 
-  const stats = adminStats();
-  const profile = adminProfile();
+  const [stats, profile] = await Promise.all([adminStats(), adminProfile()]);
 
   const totalEntries = CONTENT_ORDER.reduce((sum, key) => sum + stats[key].total, 0);
   const isEmpty = totalEntries === 0;

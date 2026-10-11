@@ -2,13 +2,13 @@ import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { get, now, purgeExpiredSessions, run } from "@/lib/db";
+import { get, now, run } from "@/lib/db";
 
 /**
  * Opaque, DB-backed sessions.
  *
  * A 32-byte random token lives in an httpOnly cookie; only its SHA-256 digest
- * is persisted. Because sessions are rows, signing out (or banning a device)
+ * is persisted. Because sessions are rows, signing out (or revoking a device)
  * is a real revocation rather than waiting for a token to expire.
  */
 
@@ -46,15 +46,20 @@ function sessionExpiry(from = Date.now()): string {
   return new Date(from + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
 }
 
+/** Removes expired sessions. Cheap enough to call on every login. */
+export async function purgeExpiredSessions(): Promise<void> {
+  await run(`DELETE FROM sessions WHERE "expires_at" <= $1`, [now()]);
+}
+
 export async function createSession(userId: string): Promise<void> {
-  purgeExpiredSessions();
+  await purgeExpiredSessions();
 
   const token = randomBytes(32).toString("base64url");
   const expiresAt = sessionExpiry();
 
-  run(
-    `INSERT INTO sessions (id, token_hash, user_id, expires_at, created_at, last_seen_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+  await run(
+    `INSERT INTO sessions ("id", "token_hash", "user_id", "expires_at", "created_at", "last_seen_at")
+     VALUES ($1, $2, $3, $4, $5, $6)`,
     [
       randomBytes(16).toString("base64url"),
       hashToken(token),
@@ -79,7 +84,7 @@ export async function destroySession(): Promise<void> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   if (token) {
-    run("DELETE FROM sessions WHERE token_hash = ?", [hashToken(token)]);
+    await run(`DELETE FROM sessions WHERE "token_hash" = $1`, [hashToken(token)]);
   }
   jar.delete(SESSION_COOKIE);
 }
@@ -93,11 +98,11 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const token = jar.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
-  const row = get<SessionRow>(
+  const row = await get<SessionRow>(
     `SELECT s.user_id, s.expires_at, u.email, u.name, u.role
        FROM sessions s
        JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = ?`,
+      WHERE s.token_hash = $1`,
     [hashToken(token)],
   );
 
@@ -108,18 +113,17 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   const expiresAt = Date.parse(row.expires_at);
   if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-    run("DELETE FROM sessions WHERE token_hash = ?", [hashToken(token)]);
+    await run(`DELETE FROM sessions WHERE "token_hash" = $1`, [hashToken(token)]);
     jar.delete(SESSION_COOKIE);
     return null;
   }
 
   // Sliding expiry: only write when we are past the half-life.
   if (expiresAt - Date.now() < HALF_LIFE_MS) {
-    run("UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?", [
-      now(),
-      sessionExpiry(),
-      hashToken(token),
-    ]);
+    await run(
+      `UPDATE sessions SET "last_seen_at" = $1, "expires_at" = $2 WHERE "token_hash" = $3`,
+      [now(), sessionExpiry(), hashToken(token)],
+    );
   }
 
   return { id: row.user_id, email: row.email, name: row.name, role: row.role };
@@ -138,6 +142,6 @@ export async function requireUserOrNull(): Promise<SessionUser | null> {
 }
 
 export async function countUsers(): Promise<number> {
-  const row = get<{ n: number }>("SELECT COUNT(*) AS n FROM users");
+  const row = await get<{ n: string }>(`SELECT COUNT(*) AS n FROM users`);
   return Number(row?.n ?? 0);
 }

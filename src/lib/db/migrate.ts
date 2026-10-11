@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { getPool } from "./index";
+import { getPool } from "./pool";
 
 /**
  * Versioned SQL migration runner.

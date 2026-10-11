@@ -1,5 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { Client, Pool } from "pg";
+import type { Client } from "pg";
+
+import { ensureMigrated } from "./migrate";
+import { dbStatus, getPool, isDbConfigured } from "./pool";
+
+export { closePool, dbStatus, isDbConfigured, resetPool } from "./pool";
 
 /**
  * PostgreSQL access layer.
@@ -17,89 +22,26 @@ import type { Client, Pool } from "pg";
  *   `all()` / `get()` / `run()` helpers transparently reuse it. Callers never
  *   have to thread a client through.
  * - **Nothing throws when `DATABASE_URL` is absent.** Queries return empty
- *   results and `isDbConfigured()` reports the reason, so `next build` works
- *   before any database exists and the UI can say "not configured" instead of
- *   crashing.
+ *   results and `dbStatus()` reports why, so `next build` works before any
+ *   database exists and the UI can say "not configured" instead of crashing.
  */
 
 export type Row = Record<string, string | number | boolean | null>;
 
 const PUBLIC_ROLE = "portfolio_public";
 
-let pool: Pool | null = null;
-let poolKey = "";
-let missingReason: string | null = null;
-
 const activeClient = new AsyncLocalStorage<Client | null>();
-
-function resolveUrl(): string | null {
-  const raw = process.env.DATABASE_URL?.trim();
-  if (!raw) {
-    missingReason = "DATABASE_URL is not set.";
-    return null;
-  }
-  if (!/^(postgres|postgresql):\/\//i.test(raw)) {
-    missingReason = "DATABASE_URL must start with postgresql://";
-    return null;
-  }
-  missingReason = null;
-  return raw;
-}
-
-/** True when a database has been configured. Public pages degrade gracefully otherwise. */
-export function isDbConfigured(): boolean {
-  return resolveUrl() !== null;
-}
-
-/** Why the database is unavailable — `null` when it is configured. */
-export function dbStatus(): string | null {
-  resolveUrl();
-  return missingReason;
-}
-
-async function loadPg(): Promise<typeof import("pg")> {
-  return import("pg");
-}
-
-async function getPool(): Promise<Pool | null> {
-  const url = resolveUrl();
-  if (!url) return null;
-
-  // Recreate if the URL changed (tests point the app at an ephemeral cluster).
-  if (pool && poolKey === url) return pool;
-  if (pool) {
-    await pool.end().catch(() => undefined);
-    pool = null;
-  }
-
-  const { Pool: PgPool } = await loadPg();
-  pool = new PgPool({
-    connectionString: url,
-    max: Number(process.env.DATABASE_POOL_MAX ?? 10),
-    idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 10_000,
-    // Supabase/Railway poolers and self-signed local clusters both need this.
-    ssl: /sslmode=disable/i.test(url) ? false : undefined,
-  });
-  pool.on("error", () => {
-    // A dead idle backend must not take the process down.
-  });
-  poolKey = url;
-  return pool;
-}
-
-/** Close the pool (tests, graceful shutdown). */
-export async function closePool(): Promise<void> {
-  const current = pool;
-  pool = null;
-  poolKey = "";
-  if (current) await current.end().catch(() => undefined);
-}
 
 type QueryResult<T> = { rows: T[]; rowCount: number | null };
 
 async function execQuery<T>(sql: string, params: unknown[] = []): Promise<QueryResult<T>> {
   const ambient = activeClient.getStore();
+
+  // Migrations are memoised, so this resolves on the first query and is a
+  // microtask afterwards. Running it here guarantees a fresh database is never
+  // queried before its schema exists.
+  if (!ambient) await ensureMigrated().catch(() => undefined);
+
   if (ambient) {
     const res = await ambient.query<T>(sql, params);
     return { rows: res.rows, rowCount: res.rowCount };
@@ -130,7 +72,7 @@ export async function run(sql: string, params: unknown[] = []): Promise<number> 
   return res.rowCount ?? 0;
 }
 
-/** Execute one or more statements with no parameters. Migration use only. */
+/** Execute one or more statements with no parameters. Migration/bootstrap use only. */
 export async function exec(sql: string): Promise<void> {
   const ambient = activeClient.getStore();
   if (ambient) {
@@ -147,6 +89,8 @@ export async function exec(sql: string): Promise<void> {
  * Security applies. Falls back to a plain call when no database is configured.
  */
 export async function withPublicRole<T>(fn: () => Promise<T>): Promise<T> {
+  await ensureMigrated().catch(() => undefined);
+
   const p = await getPool();
   if (!p) return fn();
 
@@ -171,6 +115,8 @@ export async function withPublicRole<T>(fn: () => Promise<T>): Promise<T> {
  * rolls the whole unit of work back.
  */
 export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+  await ensureMigrated().catch(() => undefined);
+
   const p = await getPool();
   if (!p) return fn();
 
