@@ -112,6 +112,10 @@ describe("isSafeExternalUrl", () => {
     expect(isSafeExternalUrl("data:text/html,<script>")).toBe(false);
     expect(isSafeExternalUrl("ftp://example.org")).toBe(false);
     expect(isSafeExternalUrl("example.org")).toBe(false);
+
+    // Protocol-relative: `new URL()` parses it, but it resolves to another
+    // origin when rendered — so it must not slip through as a "same-site path".
+    expect(isSafeExternalUrl("//evil.example.com/steal")).toBe(false);
   });
 });
 
