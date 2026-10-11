@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { Client } from "pg";
+import type { Client, QueryResultRow } from "pg";
 
 import { ensureMigrated } from "./migrate";
 import { dbStatus, getPool, isDbConfigured } from "./pool";
@@ -34,7 +34,10 @@ const activeClient = new AsyncLocalStorage<Client | null>();
 
 type QueryResult<T> = { rows: T[]; rowCount: number | null };
 
-async function execQuery<T>(sql: string, params: unknown[] = []): Promise<QueryResult<T>> {
+async function execQuery<T extends QueryResultRow>(
+  sql: string,
+  params: unknown[] = [],
+): Promise<QueryResult<T>> {
   const ambient = activeClient.getStore();
 
   // Migrations are memoised, so this resolves on the first query and is a
