@@ -1,13 +1,18 @@
 {
-  "name": "portfolio-scaffold",
+  "name": "portfolio-cv",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node -e \"require('node:fs').rmSync('.next',{recursive:true,force:true})\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "clean": "node -e \"require('node:fs').rmSync('.next',{recursive:true,force:true})\""
+    "clean": "node -e \"require('node:fs').rmSync('.next',{recursive:true,force:true})\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:create-admin": "node scripts/create-admin.mjs"
   },
   "dependencies": {
     "next": "16.4.0",
@@ -18,10 +23,10 @@
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^24.19.2",
-    "@types/pg": "^8.23.1",
+    "@types/pg": "^8.15.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "embedded-postgres": "^17.10.0-beta.17",
+    "embedded-postgres": "17.10.0-beta.17",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
