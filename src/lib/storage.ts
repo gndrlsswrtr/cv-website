@@ -45,6 +45,126 @@ const MIME_BY_EXT: Record<string, string> = {
 
 export const MAX_UPLOAD_BYTES = 12 * 1024 * 1024; // 12 MiB
 
+/* ------------------------------------------------------------------ */
+/* Content inspection                                                   */
+/* ------------------------------------------------------------------ */
+
+function startsWithBytes(buffer: Buffer, signature: readonly number[]): boolean {
+  if (buffer.length < signature.length) return false;
+  for (let i = 0; i < signature.length; i += 1) {
+    if (buffer[i] !== signature[i]) return false;
+  }
+  return true;
+}
+
+function startsWithString(buffer: Buffer, text: string): boolean {
+  return buffer.length >= text.length && buffer.toString("latin1", 0, text.length) === text;
+}
+
+const OLE_HEADER = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1] as const;
+const ZIP_HEADER = [0x50, 0x4b, 0x03, 0x04] as const;
+
+/** Bytes that mark a file as executable — never acceptable in an upload. */
+const EXECUTABLE_HEADERS: readonly (readonly number[])[] = [
+  [0x4d, 0x5a], // DOS / PE  (MZ)
+  [0x7f, 0x45, 0x4c, 0x46], // ELF (Linux)
+  [0xfe, 0xed, 0xfa, 0xce], // Mach-O 32-bit
+  [0xfe, 0xed, 0xfa, 0xcf], // Mach-O 64-bit
+  [0xca, 0xfe, 0xba, 0xbe], // Mach-O fat binary / Java class
+  [0x50, 0x4b, 0x05, 0x06], // empty ZIP archive
+  [0x50, 0x4b, 0x07, 0x08], // ZIP spanned
+];
+
+/** Markers that identify markup/script payloads regardless of extension. */
+const HTML_MARKERS = [
+  "<!doctype html",
+  "<html",
+  "<?php",
+  "<script",
+  "<?xml", // SVG and HTML-with-XML-declaration payloads
+  "<svg",
+] as const;
+
+/**
+ * True when the buffer looks like plain text: no NUL bytes and no HTML/script
+ * markers in the leading window. Used for genuinely text formats where there is
+ * no magic number to check against.
+ */
+function looksLikeText(buffer: Buffer): boolean {
+  const window = buffer.subarray(0, 4096);
+  if (window.includes(0)) return false;
+  const lower = window.toString("latin1").toLowerCase();
+  return !HTML_MARKERS.some((marker) => lower.includes(marker));
+}
+
+function containsHtmlMarker(buffer: Buffer): boolean {
+  const lower = buffer.subarray(0, 4096).toString("latin1").toLowerCase();
+  return HTML_MARKERS.some((marker) => lower.includes(marker));
+}
+
+/**
+ * Extension → required leading bytes. A file that claims an extension but does
+ * not start with these bytes is rejected — this is what stops an HTML or
+ * executable payload from being uploaded as `photo.png`.
+ *
+ * Extensions absent from this map are text formats and are checked with
+ * `looksLikeText` instead.
+ */
+const MAGIC_BY_EXT: Record<string, (buffer: Buffer) => boolean> = {
+  pdf: (b) => startsWithString(b, "%PDF-"),
+  png: (b) => startsWithBytes(b, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  jpg: (b) => startsWithBytes(b, [0xff, 0xd8, 0xff]),
+  jpeg: (b) => startsWithBytes(b, [0xff, 0xd8, 0xff]),
+  gif: (b) => startsWithString(b, "GIF8"),
+  webp: (b) => startsWithString(b, "RIFF") && startsWithString(b.subarray(8), "WEBP"),
+  zip: (b) => startsWithBytes(b, ZIP_HEADER),
+  docx: (b) => startsWithBytes(b, ZIP_HEADER),
+  xlsx: (b) => startsWithBytes(b, ZIP_HEADER),
+  pptx: (b) => startsWithBytes(b, ZIP_HEADER),
+  odt: (b) => startsWithBytes(b, ZIP_HEADER),
+  rtf: (b) => startsWithString(b, "{\\rtf"),
+  doc: (b) => startsWithBytes(b, OLE_HEADER),
+  xls: (b) => startsWithBytes(b, OLE_HEADER),
+  ppt: (b) => startsWithBytes(b, OLE_HEADER),
+  txt: looksLikeText,
+  csv: looksLikeText,
+};
+
+/**
+ * Inspects the bytes behind an allowed extension.
+ * Returns an error message, or `null` when the content is acceptable.
+ */
+export function contentError(extension: string, buffer: Buffer): string | null {
+  if (buffer.length === 0) return "The file is empty.";
+
+  for (const header of EXECUTABLE_HEADERS) {
+    if (startsWithBytes(buffer, header)) {
+      return "This file is an executable or archive format that is not allowed.";
+    }
+  }
+  if (startsWithString(buffer, "#!")) {
+    return "This file is a script, which is not allowed.";
+  }
+  if (containsHtmlMarker(buffer)) {
+    return "HTML, SVG and script content are not allowed in uploads.";
+  }
+
+  const check = MAGIC_BY_EXT[extension];
+  if (check && !check(buffer)) {
+    return `The file content does not match its ".${extension}" extension.`;
+  }
+  if (!check && !looksLikeText(buffer)) {
+    return "This file does not look like plain text.";
+  }
+  return null;
+}
+
+/** True when the buffer's content is acceptable for the given extension. */
+export function hasValidContent(extension: string, buffer: Buffer): boolean {
+  return contentError(extension, buffer) === null;
+}
+
+
 export function extensionOf(filename: string): string {
   const ext = path.extname(filename).replace(".", "").toLowerCase();
   return ext;
@@ -83,9 +203,16 @@ export async function saveUpload(file: File): Promise<StoredFile> {
     );
   }
 
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  // Extension allow-list first, then the bytes themselves: the browser-declared
+  // MIME type is never consulted, so an .html payload renamed to .png is
+  // refused here rather than being served later as image/png.
+  const rejection = contentError(extensionOf(file.name), buffer);
+  if (rejection) throw new Error(rejection);
+
   const storedName = `${crypto.randomUUID()}.${extensionOf(file.name)}`;
   fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
-  const buffer = Buffer.from(await file.arrayBuffer());
   fs.writeFileSync(path.join(UPLOAD_ROOT, storedName), buffer, { flag: "wx" });
 
   return {

@@ -384,7 +384,10 @@ export function slugify(input: string): string {
 
 export function isSafeExternalUrl(value: string): boolean {
   if (!value) return true;
-  if (value.startsWith("/") || value.startsWith("#")) return true;
+  if (value.startsWith("#")) return true;
+  // Internal paths are fine, but `//host/path` is protocol-relative and
+  // resolves to a different origin — reject it rather than validate it.
+  if (value.startsWith("/")) return !value.startsWith("//");
   try {
     const url = new URL(value);
     return url.protocol === "http:" || url.protocol === "https:";
