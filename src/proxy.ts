@@ -23,10 +23,11 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if ((pathname === "/login" || pathname === "/setup") && hasSession) {
-    return NextResponse.redirect(new URL("/admin", request.url));
-  }
-
+  // Deliberately no "cookie present on /login → /admin" bounce. The proxy can
+  // only see that a cookie exists, not whether it is still valid, so bouncing
+  // here would loop forever against a stale cookie: the admin layout rejects
+  // it → /login → back to /admin → … . The login page performs the real
+  // "already signed in?" check itself with `getSessionUser()`.
   return NextResponse.next();
 }
 

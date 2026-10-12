@@ -106,15 +106,18 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     [hashToken(token)],
   );
 
-  if (!row) {
-    jar.delete(SESSION_COOKIE);
-    return null;
-  }
+  // This must stay a *pure read*. `cookies().delete()` is only legal inside a
+  // Server Action or Route Handler; `requireUser()` also runs from Server
+  // Components (the admin layout), where mutating the jar throws
+  // "Cookies can only be modified in a Server Action or Route Handler" and
+  // turns every stale-cookie request into a 500 instead of a redirect to
+  // /login. Stale cookies are harmless here — they resolve to `null`, and the
+  // next successful sign-in overwrites them via `createSession()`.
+  if (!row) return null;
 
   const expiresAt = Date.parse(row.expires_at);
   if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
     await run(`DELETE FROM sessions WHERE "token_hash" = $1`, [hashToken(token)]);
-    jar.delete(SESSION_COOKIE);
     return null;
   }
 
