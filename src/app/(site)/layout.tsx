@@ -4,11 +4,12 @@ import type { ReactNode } from "react";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { getProfile, getSiteSettings } from "@/lib/content";
+import { DEFAULT_DESCRIPTION } from "@/lib/seo";
 
 const SITE_URL = process.env.SITE_URL || "http://localhost:3000";
 const FALLBACK_TITLE = process.env.SITE_TITLE || "Portfolio";
 const FALLBACK_DESCRIPTION =
-  "Published achievements, certifications, education, skills, experience, projects and documents.";
+  process.env.SITE_DESCRIPTION?.trim() || DEFAULT_DESCRIPTION;
 
 /**
  * The public site's title and meta description come from the database so the

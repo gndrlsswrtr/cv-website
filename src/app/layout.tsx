@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { DEFAULT_DESCRIPTION } from "@/lib/seo";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,6 +17,10 @@ const geistMono = Geist_Mono({
 
 const SITE_URL = process.env.SITE_URL || "http://localhost:3000";
 const SITE_TITLE = process.env.SITE_TITLE || "Portfolio";
+// The admin, login and setup routes have no database-backed copy of their own,
+// so they fall back to the environment. On the public site the value stored in
+// Settings wins — see `src/app/(site)/layout.tsx`.
+const SITE_DESCRIPTION = process.env.SITE_DESCRIPTION?.trim() || DEFAULT_DESCRIPTION;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -22,8 +28,7 @@ export const metadata: Metadata = {
     default: SITE_TITLE,
     template: `%s · ${SITE_TITLE}`,
   },
-  description:
-    "Published achievements, certifications, education, skills, experience, projects and documents.",
+  description: SITE_DESCRIPTION,
   applicationName: SITE_TITLE,
   robots: { index: true, follow: true },
 };
