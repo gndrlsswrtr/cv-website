@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import type { Row } from "@/lib/crud";
@@ -23,6 +24,65 @@ function dateRange(row: Row, currentLabel = "Present"): string {
   const current = row.is_current === true || row.is_current === 1;
   const end = current ? "" : str(row, "end_date");
   return formatDateRange(str(row, "start_date"), end, currentLabel);
+}
+
+/**
+ * A file attached to a certification or achievement: an image preview plus a
+ * link that also covers PDFs.
+ *
+ * The URL names the table the entry lives in, which `/media/[resource]`
+ * allow-lists. The file is unreachable while the entry is unpublished — the
+ * route reads through the `portfolio_public` role, so Row Level Security is
+ * what enforces that, not an application-level check.
+ */
+function Attachment({
+  row,
+  resource,
+  alt,
+}: {
+  row: Row;
+  resource: "certifications" | "achievements";
+  alt: string;
+}) {
+  const id = str(row, "id");
+  if (!id || !str(row, "stored_name")) return null;
+
+  const href = `/media/${resource}/${id}`;
+  const isImage = str(row, "mime").startsWith("image/");
+  const label = str(row, "original_name") || "Attachment";
+  const size = Number(row.size ?? 0);
+
+  return (
+    <figure className="mt-3">
+      {isImage ? (
+        // The caption below carries the real link; this preview is decorative
+        // and skipped by keyboard and screen readers, so the same file is not
+        // announced twice.
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          tabIndex={-1}
+          aria-hidden
+          className="relative block aspect-[4/3] w-full overflow-hidden rounded-lg border border-border bg-surface"
+        >
+          <Image
+            src={href}
+            alt=""
+            fill
+            sizes="(max-width: 640px) 100vw, 560px"
+            className="object-contain"
+          />
+        </a>
+      ) : null}
+      <figcaption className="mt-2 text-xs text-muted">
+        <a href={href} target="_blank" rel="noopener noreferrer" className="hover:text-accent">
+          {isImage ? "View image" : "Open document"} — {label}
+          {size > 0 ? ` (${formatBytes(size)})` : ""}
+        </a>
+      </figcaption>
+    </figure>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -241,6 +301,7 @@ export function AchievementList({ rows }: { rows: Row[] }) {
                 <Description text={str(row, "description")} />
               </div>
             ) : null}
+            <Attachment row={row} resource="achievements" alt={str(row, "title")} />
           </div>
           {str(row, "url") ? (
             <div className="shrink-0 text-sm">
@@ -286,6 +347,7 @@ export function CertificationList({ rows }: { rows: Row[] }) {
                 <Description text={str(row, "description")} />
               </div>
             ) : null}
+            <Attachment row={row} resource="certifications" alt={`${str(row, "name")} certificate`} />
             {(str(row, "credential_url") || str(row, "verify_url")) && (
               <div className="mt-3 flex flex-wrap gap-4 text-sm">
                 {str(row, "credential_url") ? (
