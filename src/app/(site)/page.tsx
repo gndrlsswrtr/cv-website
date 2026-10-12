@@ -58,8 +58,17 @@ export default async function HomePage() {
   ]);
 
   const name = profile.full_name.trim() || "Your name";
+  // Every list this page renders has to count. Leaving achievements and
+  // certifications out made the page announce "Nothing has been published yet."
+  // directly above a certification that was, in fact, published.
   const hasContent =
-    experience.length + education.length + skills.length + projects.length > 0;
+    experience.length +
+      education.length +
+      skills.length +
+      projects.length +
+      achievements.length +
+      certifications.length >
+    0;
 
   return (
     <div className="space-y-16">
