@@ -25,7 +25,7 @@ export interface FieldOption {
 }
 
 export interface FieldDef {
-  /** Also the SQLite column name. */
+  /** Column name in the backing table. */
   name: string;
   label: string;
   type: FieldType;
