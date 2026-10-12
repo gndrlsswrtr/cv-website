@@ -277,6 +277,13 @@ export const RESOURCES: Record<ResourceKey, ResourceDef> = {
       sortField,
       publishField,
     ],
+    // Optional: a photo of an award, a poster for a talk, or the paper itself.
+    upload: {
+      label: "Image or document",
+      extensions: ["pdf", "png", "jpg", "jpeg", "webp", "gif"],
+      requiredOnCreate: false,
+      help: "Shown on the public achievement. Keep it modest in size — it is served to every visitor.",
+    },
   },
 
   certifications: {
@@ -303,6 +310,14 @@ export const RESOURCES: Record<ResourceKey, ResourceDef> = {
       sortField,
       publishField,
     ],
+    // Optional: a scan or photo of the certificate itself. Never required —
+    // plenty of credentials are legitimately verifiable without a file.
+    upload: {
+      label: "Certificate file",
+      extensions: ["pdf", "png", "jpg", "jpeg", "webp", "gif"],
+      requiredOnCreate: false,
+      help: "A scan or photo of the certificate (PDF, PNG, JPG, WebP or GIF). Shown on the public certification page.",
+    },
   },
 
   documents: {
