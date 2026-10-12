@@ -42,9 +42,9 @@ yarn-error.log*
 next-env.d.ts
 
 # --- portfolio application ---
-# SQLite database (contains private content + password hashes)
-/data/
 # Uploaded documents served through the authenticated route handler
 /private/
+# Local development PostgreSQL data directory (created by `npm run db:dev`)
+/.data/
 # Runtime log of generated first-run admin credentials
 .admin-credentials
