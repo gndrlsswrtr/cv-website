@@ -207,9 +207,9 @@ order:
 
 1. **Extension allow-list** — a fixed set (PDF, Office, images, text, CSV,
    zip). The browser-declared MIME type is never consulted.
-2. **Size cap** — **12 MiB** (`MAX_UPLOAD_BYTES`). The server-action body
-   limit sits just above it at 15 MB (`experimental.serverActions.bodySizeLimit`),
-   so anything over 12 MiB is turned away by the application's own check.
+2. **Size cap** — **12 MiB** (`MAX_UPLOAD_BYTES`), checked once the body has
+   been received. The server-action body limit sits just above it at 15 MB
+   (`experimental.serverActions.bodySizeLimit`).
 3. **Content inspection** — `contentError()` reads the bytes:
    - executables and archives by magic header (PE/`MZ`, ELF, Mach-O, class
      files, spanned zips) are rejected;
@@ -282,7 +282,7 @@ pg_dump --file=portfolio-YYYYMMDD.sql "$DATABASE_URL"
 psql --file=portfolio-YYYYMMDD.sql "$DATABASE_URL"
 ```
 
-Use `pg_dump`/`pg_restore` matching your server's major version (17), and
+Use `pg_dump`/`pg_restore` matching your server's major version, and
 treat dump files as sensitive — they contain password hashes and the contact
 inbox.
 
@@ -303,7 +303,9 @@ The suite **boots a real embedded PostgreSQL** for every run (initialised in
 the OS temp folder, wiped on teardown) instead of mocking the database — so
 migrations, the advisory lock, role switching and **Row Level Security are
 exercised for real**: a policy that would hide the wrong rows in production
-fails here too. Test files run sequentially against that one instance.
+fails here too. Each run gets its own database and its own port, so tests
+never touch your `db:dev` data. Test files run sequentially against that one
+instance.
 
 What is covered:
 
@@ -334,7 +336,10 @@ What is covered:
   as **salted SHA-256 digests**, never raw.
 - **Authorization**: `proxy.ts` only redirects on cookie *presence* (UX);
   real checks are server-side — `requireUser()` in the admin layout, in every
-  server action, and in the document route. The client is never trusted.
+  server action, and in the document route. The client is never trusted, and
+  file routes answer with a flat `404` whether an id is wrong, missing or
+  merely unpublished — no probing can tell private from non-existent (**no
+  IDOR**).
 - **SQL**: identifiers come only from the static registry and are
   pattern-checked and double-quoted; every value is a bound `$n` parameter.
 - **Private storage**: uploads live outside `public/`, are served only by

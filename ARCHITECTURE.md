@@ -119,9 +119,11 @@ One declaration drives everything:
 
 Adding a content type is therefore mostly declarative: a registry entry, a
 `CONTENT_ORDER` entry, a table in a new migration, and one public page that
-calls `getPublished(key)`. Registry consistency (order matches registry, only
-documents default to draft, field names are valid identifiers, …) is asserted
-in [`tests/validation.test.ts`](tests/validation.test.ts).
+calls `getPublished(key)`. Registry consistency is asserted in
+[`tests/validation.test.ts`](tests/validation.test.ts): every `CONTENT_ORDER`
+key has a coherent def, table/title/search names are identifier-safe, field
+names are unique, exactly one `published` checkbox exists per resource, and
+only `documents` defaults to draft.
 
 ## Data model
 
