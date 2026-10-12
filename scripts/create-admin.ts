@@ -19,6 +19,7 @@ import { hashPassword, validatePasswordStrength } from "@/lib/auth/password";
 import { closePool } from "@/lib/db/pool";
 import { getPool } from "@/lib/db/pool";
 import { applyMigrations } from "@/lib/db/migrate";
+import { loadEnv } from "./lib/load-env";
 
 function argValue(flag: string): string | undefined {
   const hit = process.argv.find((a) => a.startsWith(`${flag}=`));
@@ -39,6 +40,8 @@ async function ask(question: string, fallback = ""): Promise<string> {
 }
 
 async function main(): Promise<void> {
+  loadEnv();
+
   const url = process.env.DATABASE_URL;
   if (!url) {
     console.error(

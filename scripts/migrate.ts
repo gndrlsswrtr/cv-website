@@ -14,8 +14,11 @@
 
 import { closePool } from "@/lib/db/pool";
 import { applyMigrations } from "@/lib/db/migrate";
+import { loadEnv } from "./lib/load-env";
 
 async function main(): Promise<void> {
+  loadEnv();
+
   if (!process.env.DATABASE_URL) {
     console.error(
       "DATABASE_URL is not set.\n" +
