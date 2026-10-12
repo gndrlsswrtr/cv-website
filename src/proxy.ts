@@ -3,6 +3,13 @@ import { NextResponse, type NextRequest } from "next/server";
 const SESSION_COOKIE = "cv_session";
 
 /**
+ * Marks a /login redirect that came from a rejected (stale) session rather
+ * than from an anonymous visitor, so the proxy knows not to bounce it back.
+ * Kept in sync with `requireUser()` in src/lib/auth/session.ts.
+ */
+const EXPIRED_PARAM = "expired";
+
+/**
  * Fast redirect for the admin area.
  *
  * This is UX only: it keeps anonymous visitors from ever rendering the admin
