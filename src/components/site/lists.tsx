@@ -38,11 +38,9 @@ function dateRange(row: Row, currentLabel = "Present"): string {
 function Attachment({
   row,
   resource,
-  alt,
 }: {
   row: Row;
   resource: "certifications" | "achievements";
-  alt: string;
 }) {
   const id = str(row, "id");
   if (!id || !str(row, "stored_name")) return null;
@@ -301,7 +299,7 @@ export function AchievementList({ rows }: { rows: Row[] }) {
                 <Description text={str(row, "description")} />
               </div>
             ) : null}
-            <Attachment row={row} resource="achievements" alt={str(row, "title")} />
+            <Attachment row={row} resource="achievements" />
           </div>
           {str(row, "url") ? (
             <div className="shrink-0 text-sm">
@@ -347,7 +345,7 @@ export function CertificationList({ rows }: { rows: Row[] }) {
                 <Description text={str(row, "description")} />
               </div>
             ) : null}
-            <Attachment row={row} resource="certifications" alt={`${str(row, "name")} certificate`} />
+            <Attachment row={row} resource="certifications" />
             {(str(row, "credential_url") || str(row, "verify_url")) && (
               <div className="mt-3 flex flex-wrap gap-4 text-sm">
                 {str(row, "credential_url") ? (
