@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { ResourceForm, initialValues } from "@/components/admin/ResourceForm";
+import { ResourceForm } from "@/components/admin/ResourceForm";
+import { initialValues } from "@/lib/form-values";
 import { getResource, isResourceKey } from "@/lib/resources";
 
 export const instant = false;
