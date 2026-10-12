@@ -132,10 +132,18 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   return { id: row.user_id, email: row.email, name: row.name, role: row.role };
 }
 
-/** Guard for Server Components / pages. */
+/**
+ * Guard for Server Components / pages.
+ *
+ * The `?expired=1` marker is load-bearing. The proxy bounces a *valid*
+ * session off /login back to /admin, and it can only see that a cookie
+ * exists — not whether it still resolves. Without the marker a stale cookie
+ * would loop forever (/admin → /login → /admin → …), so the proxy skips its
+ * bounce whenever this parameter is present.
+ */
 export async function requireUser(): Promise<SessionUser> {
   const user = await getSessionUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?expired=1");
   return user;
 }
 

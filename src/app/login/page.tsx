@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { LoginForm } from "@/components/admin/LoginForm";
-import { countUsers, getSessionUser } from "@/lib/auth/session";
+import { countUsers } from "@/lib/auth/session";
 
 /**
  * Blocking (not streamed) so the "no account yet" redirect is a real HTTP
@@ -26,10 +26,11 @@ export default async function LoginPage({ searchParams }: Props) {
   const rawNext = typeof sp.next === "string" ? sp.next : "";
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/admin";
 
-  // Already signed in? The proxy can only see that a cookie *exists*, so this
-  // is where the real check happens (see the note in src/proxy.ts). A stale
-  // cookie resolves to `null` and simply shows the form.
-  if (await getSessionUser()) redirect(next);
+  // No "already signed in?" check here on purpose. The proxy bounces a valid
+  // session away from /login before this page ever renders; a stale cookie is
+  // caught by `requireUser()` instead, which lands on /login?expired=1 and is
+  // deliberately not bounced (see src/proxy.ts). Redirecting from here would
+  // make Next resolve the destination route while prerendering.
 
   return (
     <main id="main" className="flex min-h-screen items-center justify-center px-5 py-12">

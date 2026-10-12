@@ -23,11 +23,20 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Deliberately no "cookie present on /login → /admin" bounce. The proxy can
-  // only see that a cookie exists, not whether it is still valid, so bouncing
-  // here would loop forever against a stale cookie: the admin layout rejects
-  // it → /login → back to /admin → … . The login page performs the real
-  // "already signed in?" check itself with `getSessionUser()`.
+  // A valid session visiting /login is sent straight to /admin. The check is
+  // cookie *presence* only — the proxy must not share app modules — so a
+  // stale cookie would bounce forever (/admin → /login → /admin → …).
+  // `requireUser()` therefore marks its own redirects with `?expired=1`, and
+  // we never bounce on that marker: the login page renders and the owner
+  // signs in again, which overwrites the stale cookie.
+  if (
+    (pathname === "/login" || pathname === "/setup") &&
+    hasSession &&
+    !request.nextUrl.searchParams.has(EXPIRED_PARAM)
+  ) {
+    return NextResponse.redirect(new URL("/admin", request.url));
+  }
+
   return NextResponse.next();
 }
 
