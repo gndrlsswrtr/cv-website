@@ -239,8 +239,10 @@ through `withPublicRole()` — there is no admin bypass on that route.
      UX, never trusted for authorization;
   2. the admin layout calls `requireUser()` before rendering anything
      (`instant = false` makes the redirect a real HTTP response);
-  3. every server action and both file routes re-establish the session
-     themselves.
+  3. every server action calls `requireUser()` again before touching data,
+     and the document route resolves the session itself with
+     `requireUserOrNull()` (the media route needs no session — it serves only
+     what the public role can already see).
 - **First-admin paths** (there is no registration and no seeded password):
   1. **`/setup`** — browser flow, reachable only while `users` is empty;
      it returns 404 forever afterwards, so it can never mint a second admin;
@@ -295,8 +297,9 @@ POST form → src/app/admin/actions.ts
   public site (home, every section, metadata), so publishing or deleting
   anywhere re-renders everything cached. `cacheLife("minutes")` is a safety
   net: if a tag were ever missed, content still refreshes within a minute.
-- **Never cached**: admin pages, `/login`, `/setup`, `/documents/[id]` and
-  `/media/[resource]/[id]` — live state and per-request authorization.
+- **Not `'use cache'`**: admin pages, `/login`, `/setup`, `/documents/[id]`
+  and `/media/[resource]/[id]` — live state and per-request authorization
+  (the file routes still send their own `Cache-Control` response headers).
 - **PPR in practice**: `/projects/[slug]` resolves `params` at request time,
   so the detail body streams behind a `<Suspense>` boundary with a
   placeholder while list pages remain fully cached — the data itself still
@@ -376,7 +379,8 @@ route, and contact-form validation/rate limiting (see
 - **No email delivery.** Contact messages are written to a private
   `contact_messages` inbox read in the dashboard. There is **no third-party
   mail service wired up** — no SMTP, no provider SDK, nothing sends mail —
-  and the visitor's own email address is offered as the direct alternative.
+  and the owner's public email address is offered to visitors on the same
+  page as the direct alternative.
 - **In-memory rate limiting.** Login and contact throttling live in the
   process (`src/lib/security.ts`) and reset on restart; so does the
   per-process fallback salt when `CONTACT_HASH_SALT` is unset.

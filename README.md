@@ -186,10 +186,11 @@ The database — not the application — decides who can see which rows:
 - `profile` and `site_settings` are publicly readable by design (they decide
   what the site shows).
 - `users`, `sessions` and `contact_messages` carry **no public policy at
-  all**, and the public role is not even granted `SELECT` on
-  `contact_messages` — RLS with zero policies means zero rows, so password
-  hashes, session tokens and the inbox are unreachable from the public read
-  path.
+  all** — and the public role holds no `SELECT` grant on them either
+  (`contact_messages` is explicitly revoked; the others are never granted):
+  RLS with zero policies means zero rows, so password hashes, session tokens
+  and the inbox are unreachable from the public read path even if a query
+  named the table directly.
 - The **admin path connects as the table owner** (the `DATABASE_URL` user),
   and PostgreSQL exempts table owners from RLS. That is why
   **`FORCE ROW LEVEL SECURITY` is deliberately not set** — the owner must see
