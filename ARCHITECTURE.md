@@ -162,7 +162,7 @@ Four migrations, applied in order: `0001_init` (schema), `0002_rls`
 | Table | Columns |
 |---|---|
 | `site_settings` | `id` = 1 (CHECK) · `site_title` · `site_description` · nine `featured_*` booleans (home-page sections) · `contact_enabled` · `contact_intro` · `contact_show_phone` · `contact_show_email` · `updated_at` |
-| `social_links` | `id` uuid PK · `platform` UNIQUE · `url` · `label` · `sort_order` · `published` |
+| `social_links` | `id` uuid PK · `platform` UNIQUE · `url` · `label` · `sort_order` · `published` · `created_at` · `updated_at` |
 | `contact_messages` | `id` uuid PK · `name` · `email` · `subject` · `message` · `ip_hash` · `user_agent` · `read_at` · `created_at` |
 | `schema_migrations` | `name` text PK · `applied_at` (created by the runner) |
 
@@ -176,9 +176,11 @@ Four migrations, applied in order: `0001_init` (schema), `0002_rls`
   pointer and unlinks the file.
 - `profile` and `site_settings` are singletons enforced by `CHECK (id = 1)`
   and seeded by their migrations — no application-level upsert needed to read.
-- Content tables have no foreign keys between them; ordering is by
-  `sort_order`, and `updated_at` is maintained by a `touch_updated_at()`
-  trigger.
+- Content tables have no foreign keys between them and are ordered by
+  `sort_order`. `updated_at` is written explicitly by the CRUD and settings
+  layers on every update; a `touch_updated_at()` trigger additionally
+  backstops it on `users`, `volunteer_experience`, `social_links` and
+  `site_settings`.
 - Indexes follow the hot paths: `(published, sort_order)` on each content
   table (achievements/certifications on `published` + date), `sessions` by
   user and expiry, `contact_messages` by `created_at DESC`, plus partial
@@ -297,8 +299,8 @@ POST form → src/app/admin/actions.ts
   so the detail body streams behind a `<Suspense>` boundary with a
   placeholder while list pages remain fully cached — the data itself still
   comes from a tagged, cached getter. Routes where `redirect()`/`notFound()`
-  must be real HTTP responses export `instant = false` (admin layout,
-  `/setup`, admin resource pages).
+  must be real HTTP responses export `instant = false` (the whole admin area,
+  `/login` and `/setup`).
 
 ## Upload pipeline
 
