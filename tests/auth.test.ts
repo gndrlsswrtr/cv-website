@@ -23,14 +23,21 @@ import { adminQuery, marker, resetMigrationBookkeeping } from "./helpers/db";
 // create → resolve → destroy — without a running server.
 const cookieJar = vi.hoisted(() => new Map<string, string>());
 
+// Counts jar writes so a test can prove `getSessionUser()` never mutates the
+// cookie. Mutating here would throw inside a Server Component ("Cookies can
+// only be modified in a Server Action or Route Handler") and 500 the admin.
+const cookieWrites = vi.hoisted(() => ({ set: 0, delete: 0 }));
+
 vi.mock("next/headers", () => ({
   cookies: async () => ({
     get: (name: string) =>
       cookieJar.has(name) ? { name, value: cookieJar.get(name)! } : undefined,
     set: (name: string, value: string) => {
+      cookieWrites.set += 1;
       cookieJar.set(name, value);
     },
     delete: (name: string) => {
+      cookieWrites.delete += 1;
       cookieJar.delete(name);
     },
   }),
@@ -43,6 +50,8 @@ beforeAll(async () => {
 
 afterEach(async () => {
   cookieJar.clear();
+  cookieWrites.set = 0;
+  cookieWrites.delete = 0;
   // Sessions cascade from users; wipe both so every test starts empty.
   await adminQuery(`DELETE FROM sessions`);
   await adminQuery(`DELETE FROM users`);
@@ -152,15 +161,21 @@ describe("sessions", () => {
     expect(rows.every((r) => !r.token_hash.includes(token!))).toBe(true);
   });
 
-  it("returns null for a missing or unknown token and clears the cookie", async () => {
+  it("returns null for a missing or unknown token without touching the cookie", async () => {
     expect(await getSessionUser()).toBeNull();
 
+    // A cookie with no matching row (recreated database, revoked session, an
+    // older sign-in that has since been purged) must resolve to null *and*
+    // leave the jar alone. `getSessionUser()` runs from the admin layout — a
+    // Server Component — where `cookies().delete()` throws, turning every
+    // stale-cookie request into a 500 instead of a redirect to /login.
     cookieJar.set(SESSION_COOKIE, randomBytes(32).toString("base64url"));
     expect(await getSessionUser()).toBeNull();
-    expect(cookieJar.has(SESSION_COOKIE)).toBe(false);
+    expect(cookieJar.has(SESSION_COOKIE)).toBe(true);
+    expect(cookieWrites).toEqual({ set: 0, delete: 0 });
   });
 
-  it("rejects and deletes an expired session", async () => {
+  it("rejects an expired session, removes the row, and leaves the cookie alone", async () => {
     const userId = await createUser(`admin-${marker()}@example.test`);
     const expiredToken = randomBytes(32).toString("base64url");
     await adminQuery(
@@ -177,7 +192,9 @@ describe("sessions", () => {
     expect(await getSessionUser()).toBeNull();
     // The stale row is removed, not merely ignored.
     expect(await adminQuery(`SELECT id FROM sessions`)).toEqual([]);
-    expect(cookieJar.has(SESSION_COOKIE)).toBe(false);
+    // ...but the jar is still untouched (see the note above).
+    expect(cookieJar.has(SESSION_COOKIE)).toBe(true);
+    expect(cookieWrites).toEqual({ set: 0, delete: 0 });
   });
 });
 
