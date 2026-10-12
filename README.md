@@ -1,168 +1,350 @@
 # Portfolio & Digital CV
 
-A personal portfolio site with a **private admin dashboard**. Visitors can
-browse published achievements, certifications, education, skills,
-experience, projects and documents **without logging in**. The owner adds,
-edits, uploads, publishes and deletes content through the dashboard — no
-code changes required.
+A personal portfolio site / digital CV with two halves:
 
-Built with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4
-and SQLite (via Node's built-in `node:sqlite`) — no external services.
+- a **public, read-only website** — visitors browse published experience,
+  volunteering, education, skills, projects, achievements, certifications and
+  documents without an account;
+- a **private, owner-only dashboard** (`/admin`) where the owner adds, edits,
+  uploads, publishes and deletes all of it without touching code.
 
-> See `ARCHITECTURE.md` for the design and security model.
+It is a **single-user** application: there is no public registration, no
+multi-tenant support, and **no seeded password anywhere**. The one admin
+account is created out-of-band — see [Quick start](#quick-start).
+
+Design, data model and security model: [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Framework | **Next.js 16** — App Router, Turbopack, Cache Components / PPR (`cacheComponents` + `partialPrefetching`) |
+| UI | **React 19**, **TypeScript**, **Tailwind CSS v4** |
+| Database | **PostgreSQL 17** accessed through [`pg`](https://www.npmjs.com/package/pg) (a pooled `Pool`, `SET LOCAL ROLE` for public reads) |
+| Validation | **Hand-written, registry-driven — not Zod.** Every field definition, rule and SQL column mapping lives in [`src/lib/resources.ts`](src/lib/resources.ts); `validateValues()` in that same file is the validator. There is no schema library in `package.json`. |
+| Migrations | Plain idempotent SQL in [`db/migrations/`](db/migrations), applied by [`src/lib/db/migrate.ts`](src/lib/db/migrate.ts) |
+| Local database | **Embedded PostgreSQL** (`embedded-postgres` devDependency) — no Docker, no local install |
+| Tests | **Vitest** against a real embedded PostgreSQL (no mocks) |
 
 ## Quick start
 
 ```bash
 npm install
-cp .env.example .env.local   # then set SESSION_SECRET (see below)
-npm run dev                  # http://localhost:3000
 ```
 
-**First run:** visiting `/admin` redirects you to `/setup`, a one-time page
-where you create the admin username and password. It disappears (404s)
-forever once an account exists.
-
-Generate a session secret:
+### 1. Start the local database (its own terminal)
 
 ```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+npm run db:dev
 ```
 
-## Environment variables
+This boots a **local embedded PostgreSQL** — no Docker and no PostgreSQL
+install on your machine; the server binaries ship with the
+`embedded-postgres` devDependency. It applies every migration, then writes
+`DATABASE_URL` into `.env.local`.
 
-| Variable | Required | Default | Purpose |
-|---|---|---|---|
-| `SESSION_SECRET` | **yes (production)** | dev-only random | 32-byte hex that signs session cookies. Boot fails in production without it. |
-| `PORT` | no | `3000` | Port for `npm start` |
-| `DATABASE_PATH` | no | `./data/portfolio.db` | SQLite database file |
-| `UPLOAD_DIR` | no | `./private/uploads` | Where uploaded documents are stored |
+- **Leave this process running** — it *is* your development database.
+  Ctrl+C stops it.
+- `npm run db:dev -- --reset` throws the data away and starts clean.
+- Data lives in `.data/postgres` (gitignored), so it survives reboots but not
+  a deliberate `--reset`.
+- The port defaults to **54329** and is overridable with `DEV_DB_PORT`.
 
-`data/`, `private/` and `.env*` are gitignored — database, uploads and
-secrets never enter version control.
+### 2. Create the admin account (required before login works)
+
+There is no public registration and no default password. Until an account
+exists, `/login` has nothing to authenticate against.
+
+Interactive form:
+
+```bash
+npm run db:create-admin
+# Email:    you@example.com
+# Name:     Your Name
+# Password: <at least 10 characters>
+```
+
+Or supply the values as environment variables:
+
+```bash
+# bash / zsh
+ADMIN_EMAIL="you@example.com" \
+ADMIN_NAME="Your Name" \
+ADMIN_PASSWORD="<choose-a-strong-password>" \
+npm run db:create-admin
+```
+
+```powershell
+# PowerShell
+$env:ADMIN_EMAIL = "you@example.com"
+$env:ADMIN_NAME = "Your Name"
+$env:ADMIN_PASSWORD = "<choose-a-strong-password>"
+npm run db:create-admin
+```
+
+`--email=`, `--name=` and `--password=` flags work too. The password must be
+10–200 characters and not on the built-in common-password list.
+
+`db:create-admin` refuses once an account exists. A deliberate second account
+requires `ALLOW_EXTRA_ADMIN=true` in the environment for that run. (The
+browser-based `/setup` page is the other first-admin path; it 404s forever as
+soon as any account exists — see
+[Authentication](./ARCHITECTURE.md#authentication-and-sessions).)
+
+### 3. Start the app
+
+```bash
+npm run dev
+```
+
+Open **http://localhost:3000** (Next picks the next free port if 3000 is
+taken), sign in at `/login`, and start adding content from the dashboard.
+
+### Using the dashboard
+
+- **Dashboard** (`/admin`) — counts, quick links, and an optional
+  sample-content loader that only fills *empty* sections with rows clearly
+  labelled `Sample …`.
+- Sidebar → section → **New** to add, or open an item to edit; reorder with
+  the arrows, toggle **Published** to hide a draft from visitors.
+- **Documents** default to *draft* (files often contain personal data);
+  everything else defaults to published.
+- **Profile & settings** — public profile, site title/description, featured
+  home-page sections, social links, contact preferences, password change.
 
 ## Scripts
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Development server |
-| `npm run build` | Production build |
-| `npm start` | Serve the production build |
+| `npm run dev` | Development server (Turbopack) → http://localhost:3000, next free port if taken |
+| `npm run build` | Production build — `prebuild` first deletes `.next`, which matters on Windows/OneDrive where stale file locks otherwise cause `EPERM` |
+| `npm start` | Serve the production build on `PORT` (default `3000`) |
 | `npm run lint` | ESLint |
-| `npm run clean` | Remove `.next` (use before `build` on Windows/OneDrive) |
-| `npm run seed` | Add sample content (also available in the dashboard) |
+| `npm run clean` | Delete `.next` only (same as what `prebuild` does) |
+| `npm test` | Run the Vitest suite once against a real embedded PostgreSQL |
+| `npm run test:watch` | Same suite in watch mode |
+| `npm run db:dev` | Start the embedded development PostgreSQL, migrate it, write `DATABASE_URL` to `.env.local` — then keep running |
+| `npm run db:migrate` | Apply pending migrations from `db/migrations/` (use as a release step) |
+| `npm run db:create-admin` | Create the first admin account (interactive, env vars, or flags) |
 
-## Using the dashboard
+## Environment variables
 
-1. Sign in at `/login`.
-2. **Dashboard** (`/admin`) — stats, quick links, sample content loader.
-3. Pick a section in the sidebar → **New** to add, or open an item to edit.
-4. **Publish toggle** — items start published (except *Documents*, which
-   start as drafts). Unpublished items are invisible to visitors.
-5. **Documents** — upload a PDF/DOC/image (15 MB max) or paste an external
-   URL. Files are stored privately and only served to visitors once the
-   document is published.
-6. **Settings** — edit your public profile (name, title, bio, contact,
-   social links) and change your password.
+Copy `.env.example` to `.env.local` to get started; `npm run db:dev` writes
+`DATABASE_URL` for you. CLI scripts read real environment variables first,
+then `.env.local`, then `.env` — the same precedence as Next.js. **Values
+below are placeholders; never commit real secrets.**
 
-All changes appear on the public site within about a minute (pages are
-cached for 60 seconds).
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `DATABASE_URL` | **Yes** | — | PostgreSQL connection string, e.g. `postgresql://USER:PASSWORD@HOST:PORT/DATABASE`. Must start with `postgresql://`. On Railway a PostgreSQL service injects it automatically. |
+| `DATABASE_POOL_MAX` | No | `10` | Maximum size of the `pg` connection pool. |
+| `DATABASE_SSL` | No | unset → driver decides | `true` = TLS (`rejectUnauthorized: false`), `false` = no TLS, unset = let the driver decide. |
+| `AUTO_MIGRATE` | No | enabled | Set to `false` to stop migrating on first query and run `npm run db:migrate` as a separate release step instead. |
+| `SITE_URL` | Production: **yes** | `http://localhost:3000` | Public origin used for canonical URLs, the sitemap and `robots.txt`. Getting it wrong is the most common deployment mistake. |
+| `SITE_TITLE` | No | `Portfolio` | Fallback site title for `<title>` and meta tags. Admin → Settings wins whenever it has a value. |
+| `SITE_DESCRIPTION` | No | built-in fallback (see [`src/lib/seo.ts`](src/lib/seo.ts)) | Fallback meta description for search results and link previews. Settings wins; keep it under ~160 characters. |
+| `PORT` | No | `3000` | Port for `npm start`. |
+| `ALLOW_INSECURE` | No | unset | `true` serves the session cookie without the `Secure` flag. Only for plain-HTTP testing on a LAN; never set it in production. |
+| `UPLOAD_DIR` | No | `private/uploads` | Where uploads are written — must never be under `public/`. On Railway, point it at a mounted volume. |
+| `DEV_DB_PORT` | No | `54329` | Port used by `npm run db:dev`. |
+| `CONTACT_HASH_SALT` | No | per-process random | Salt for the contact form's IP digests. Unset means digests stop matching after a restart, which is acceptable for throttling that already resets. |
+| `ADMIN_EMAIL` / `ADMIN_NAME` / `ADMIN_PASSWORD` | For non-interactive `db:create-admin` | — | Credentials passed to `npm run db:create-admin`. |
+| `ALLOW_EXTRA_ADMIN` | No | unset | `true` lets `db:create-admin` create an additional account; without it the script refuses once one exists. |
 
-## Deployment
+`.env*` (except `.env.example`), `.data/` and `private/` are gitignored —
+database files, uploads and secrets never enter version control.
 
-Any Node.js host works — it's a standard Next.js app with a SQLite file.
+## Migrations and Row Level Security
 
-### 1. Build
+### How migrations apply
+
+`db/migrations/*.sql` are applied in filename order, each in a transaction,
+guarded by `pg_advisory_lock` so two booting instances (a deploy plus a local
+`npm run dev`) cannot apply the same file twice. Applied names are recorded in
+`schema_migrations`, and every migration file is idempotent. Two ways in:
+
+1. **Automatically** on the first query of a process (`ensureMigrated()`),
+   unless `AUTO_MIGRATE=false`.
+2. **As a release step**: `npm run db:migrate` — a failing migration then
+   fails the deploy instead of the first visitor's request.
+
+### The security model
+
+The database — not the application — decides who can see which rows:
+
+- Migration `0002_rls.sql` creates a cluster-wide role
+  **`portfolio_public`** (`NOLOGIN`, so nothing can log in as it directly) and
+  runs `GRANT portfolio_public TO CURRENT_USER`, so the `DATABASE_URL` user
+  can assume it at query time.
+- Every content table has **Row Level Security enabled** with a
+  `published_read` policy: `FOR SELECT TO portfolio_public USING
+  (published = true)`. Public reads run inside `SET LOCAL ROLE
+  portfolio_public`, so drafts are invisible no matter what query the app
+  writes.
+- `profile` and `site_settings` are publicly readable by design (they decide
+  what the site shows).
+- `users`, `sessions` and `contact_messages` carry **no public policy at
+  all**, and the public role is not even granted `SELECT` on
+  `contact_messages` — RLS with zero policies means zero rows, so password
+  hashes, session tokens and the inbox are unreachable from the public read
+  path.
+- The **admin path connects as the table owner** (the `DATABASE_URL` user),
+  and PostgreSQL exempts table owners from RLS. That is why
+  **`FORCE ROW LEVEL SECURITY` is deliberately not set** — the owner must see
+  everything to administer content and accounts.
+
+## Storage and uploads
+
+Files are written under **`UPLOAD_DIR`** (default `private/uploads`),
+**never under `public/`** — Next.js cannot serve them directly. The only way
+to reach one is through a database-backed route handler, which looks the row
+up by id; visitors never supply a path.
+
+Validation is layered in [`src/lib/storage.ts`](src/lib/storage.ts), in this
+order:
+
+1. **Extension allow-list** — a fixed set (PDF, Office, images, text, CSV,
+   zip). The browser-declared MIME type is never consulted.
+2. **Size cap** — **12 MiB** (`MAX_UPLOAD_BYTES`); the server action body
+   limit is 15 MB, so the application check fires first.
+3. **Content inspection** — `contentError()` reads the bytes:
+   - executables and archives by magic header (PE/`MZ`, ELF, Mach-O, class
+     files, spanned zips) are rejected;
+   - shebang scripts (`#!`) are rejected;
+   - **HTML/SVG/XML/script markers are rejected whatever the extension
+     claims**, so a page renamed to `.png` never gets stored;
+   - otherwise the bytes must match the declared extension (`%PDF-`, PNG
+     signature, `PK\x03\x04` for Office/zip, RTF, OLE, image headers), and
+     text formats must look like plain text.
+   **SVG is rejected outright** — it is not an allowed extension, and its
+   `<?xml`/`<svg` markers are caught by content inspection too.
+4. **Randomised stored filename** — `<uuid>.<ext>`; the original name is kept
+   only as sanitised display metadata, never as a path.
+
+Two serving routes:
+
+- **`/media/[resource]/[id]`** — public attachments (scanned certificates,
+  award photos). The route allow-lists exactly `certifications` and
+  `achievements`, reads the row **through the public role** (so RLS hides
+  unpublished entries even for a guessed id), and resolves the stored name
+  with a traversal check.
+- **`/documents/[id]`** — the document library: serves published documents to
+  anyone, and unpublished ones only to the **signed-in owner** (404
+  otherwise). `?download=1` forces a download.
+
+## Deploying to Railway
+
+> **Nothing has been deployed.** No deployment to Railway — or anywhere else —
+> has been performed from this machine, and no external service (Railway, a
+> hosted database, a volume, a domain) is configured or connected. The steps
+> below describe the procedure the code is written for; they have **not** been
+> executed or verified against a real Railway project.
+
+1. **Add a PostgreSQL service** to the Railway project. Railway injects
+   `DATABASE_URL` into the app automatically — nothing to paste.
+2. **Set `SITE_URL` to the real `https://` origin**, e.g.
+   `https://your-app.up.railway.app` (or your custom domain). This value
+   drives canonical URLs, `sitemap.xml` and `robots.txt`; leaving it at the
+   localhost default is the most common mistake.
+3. Optionally set `SITE_TITLE` and `SITE_DESCRIPTION` (Admin → Settings
+   overrides both later, without a redeploy).
+4. **Create the admin once** — there is no registration endpoint:
+   `npm run db:create-admin` from a Railway shell or a one-off job, with
+   `ADMIN_EMAIL` / `ADMIN_NAME` / `ADMIN_PASSWORD` set for that run. Run it
+   exactly once; afterwards change the password from the dashboard if needed.
+5. **Attach a volume** and point `UPLOAD_DIR` at it (e.g.
+   `/data/uploads`) so uploads survive redeploys — the container filesystem
+   is ephemeral.
+6. Migrations run automatically on first query. Prefer an explicit release
+   step? Set `AUTO_MIGRATE=false` and run `npm run db:migrate` during deploy.
+
+## Backups
+
+A complete backup is **two things**: the database **and** the upload
+directory. Files on disk are not in the database, and database rows point at
+them.
 
 ```bash
-npm ci
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"  # → SESSION_SECRET
-npm run build
+# Database — logical backup (custom format)
+pg_dump --format=custom --no-owner --file=portfolio-YYYYMMDD.dump "$DATABASE_URL"
+
+# Restore into a database that has the target DATABASE_URL
+pg_restore --no-owner --dbname="$DATABASE_URL" portfolio-YYYYMMDD.dump
 ```
 
-### 2. Run
+Plain-SQL alternative:
 
 ```bash
-export SESSION_SECRET="<paste hex here>"
-export PORT=3000
-npm start
+pg_dump --file=portfolio-YYYYMMDD.sql "$DATABASE_URL"
+psql --file=portfolio-YYYYMMDD.sql "$DATABASE_URL"
 ```
 
-Visit `http://your-host:3000`, complete `/setup`, and start adding content.
+Use `pg_dump`/`pg_restore` matching your server's major version (17), and
+treat dump files as sensitive — they contain password hashes and the contact
+inbox.
 
-### Requirements
-
-- Node.js **24+** (for built-in `node:sqlite`).
-- A writable directory for `data/` and `private/`.
-- HTTPS in front of the app (recommended) — session cookies are `Secure`
-  when served over HTTPS.
-
-### Docker
-
-```dockerfile
-FROM node:24-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-ENV NODE_ENV=production PORT=3000
-EXPOSE 3000
-CMD ["npm", "start"]
-```
+Uploads (replace `./private/uploads` with your `UPLOAD_DIR`):
 
 ```bash
-docker build -t portfolio .
-docker run -d -p 3000:3000 \
-  -e SESSION_SECRET="<hex>" \
-  -v portfolio-data:/app/data \
-  -v portfolio-uploads:/app/private \
-  portfolio
+tar -czf uploads-YYYYMMDD.tar.gz ./private/uploads     # backup
+tar -xzf uploads-YYYYMMDD.tar.gz -C .                  # restore
 ```
 
-The volumes preserve the database and uploads across deploys.
+## Testing
 
-### systemd
-
-```ini
-[Unit]
-Description=Portfolio site
-After=network.target
-
-[Service]
-WorkingDirectory=/srv/portfolio
-Environment=NODE_ENV=production
-Environment=SESSION_SECRET=<hex>
-Environment=PORT=3000
-ExecStart=/usr/bin/npm start
-Restart=always
-User=www-data
-
-[Install]
-WantedBy=multi-user.target
+```bash
+npm test
 ```
 
-### Static hosts (Vercel/Netlify/etc.)
+The suite **boots a real embedded PostgreSQL** for every run (initialised in
+the OS temp folder, wiped on teardown) instead of mocking the database — so
+migrations, the advisory lock, role switching and **Row Level Security are
+exercised for real**: a policy that would hide the wrong rows in production
+fails here too. Test files run sequentially against that one instance.
 
-These platforms have no writable filesystem, so SQLite and file uploads
-won't work there as-is. Deploy to a Node host (VPS, Railway, Fly.io,
-Render, a Raspberry Pi…) or replace `src/lib/db.ts` with a hosted
-database.
+What is covered:
+
+| Suite | Covers |
+|---|---|
+| `tests/database.test.ts` | Migration ordering, idempotency, bookkeeping, RLS visibility (published only, `users`/`sessions` unreachable, writes denied, public role actually in effect) |
+| `tests/crud.test.ts` | Create → read → update → delete round-trips, published filtering, search, reordering, `defaultPublished` rules |
+| `tests/validation.test.ts` | Required fields, URL/date/number rules, slug derivation, registry consistency |
+| `tests/auth.test.ts` | scrypt hashing, session create/resolve/expire/revoke, hashed tokens only, login rate limiting |
+| `tests/upload.test.ts` | Extension allow-list, size cap, magic-byte content checks, randomised names, path-traversal refusal |
+| `tests/media.test.ts` | The `/media/[resource]/[id]` route: published serves bytes, unpublished 404s, allow-list, attachment migration |
+| `tests/contact.test.ts` | Contact validation, honeypot, per-IP throttling, inbox, inbox RLS |
 
 ## Security notes
 
-- Passwords hashed with **scrypt** and compared in constant time.
-- Sessions are opaque random tokens, **stored hashed**, in an `httpOnly`,
-  `SameSite=Lax` cookie signed with `SESSION_SECRET`.
-- Every server action and the document download route independently verify
-  the session — the client-side redirect is never trusted for authorization.
-- Login is rate-limited (5 attempts → 15-minute lockout).
-- SQL is built only from the field registry (identifier whitelist) with
-  bound parameters for all values.
-- Uploaded files live outside the web root and are only streamed by an
-  authenticated route handler.
-- Security headers (CSP, `X-Frame-Options`, `Referrer-Policy`, etc.) are set
-  in `next.config.ts`.
+- **Passwords**: `scrypt` (memory-hard, built into Node) with a per-password
+  salt, stored as `scrypt$N$r$p$salt$hash` and compared with
+  `timingSafeEqual`. Unknown accounts still do a hash run (timing
+  equalizer), and login failures are delayed.
+- **Sessions**: opaque 32-byte random token in the cookie; **only its
+  SHA-256 hash is stored**, so a leaked table cannot be replayed as a cookie.
+  Cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` in production
+  (`ALLOW_INSECURE=true` opts out — never in production). Signing out is a
+  real row deletion.
+- **Rate limiting**: in-memory — login 5 attempts / 15 minutes per account,
+  contact form 4 per IP / 10 minutes plus a 40 / hour global burst limit.
+- **Contact form**: hidden honeypot field, hard length caps, and IPs stored
+  as **salted SHA-256 digests**, never raw.
+- **Authorization**: `proxy.ts` only redirects on cookie *presence* (UX);
+  real checks are server-side — `requireUser()` in the admin layout, in every
+  server action, and in the document route. The client is never trusted.
+- **SQL**: identifiers come only from the static registry and are
+  pattern-checked and double-quoted; every value is a bound `$n` parameter.
+- **Private storage**: uploads live outside `public/`, are served only by
+  route handlers with traversal checks and `nosniff`, and the media route
+  allow-lists its tables.
+- **Headers** (nosniff, `Referrer-Policy`, `X-Frame-Options`,
+  `Permissions-Policy`) are set in [`next.config.ts`](next.config.ts).
 
-**Before going live:** set a strong `SESSION_SECRET`, run behind HTTPS, and
-change the admin password from the dashboard after setup.
+## Content rules
+
+The site never invents facts about its owner. It ships with **no** content
+rows: no qualifications, employers, awards, credentials or verification links
+are fabricated by the application, and every field is an editable placeholder
+until the owner enters real data. The only prewritten copy is a factual
+fallback meta description and clearly labelled `Sample …` rows from the
+optional dashboard loader — both meant to be replaced.
