@@ -46,5 +46,9 @@ next-env.d.ts
 /private/
 # Local development PostgreSQL data directory (created by `npm run db:dev`)
 /.data/
+# Leftover SQLite artifact from before the PostgreSQL conversion. The app and
+# the test suite both read `DATABASE_URL` now, so nothing serves this file, but
+# it must never be committed as if it were the live database.
+/data/
 # Runtime log of generated first-run admin credentials
 .admin-credentials

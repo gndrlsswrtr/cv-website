@@ -25,7 +25,7 @@ import { fileExists, mimeFor, resolveStoredPath } from "@/lib/storage";
  * a browser from re-interpreting the response as something else.
  */
 
-const SERVEABLE = new Set(["certifications", "achievements"]);
+const SERVEABLE = new Set(["certifications", "achievements", "projects"]);
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

@@ -246,6 +246,14 @@ export const RESOURCES: Record<ResourceKey, ResourceDef> = {
       sortField,
       publishField,
     ],
+    // Optional: a screenshot or cover image. Not required — plenty of work is
+    // better described than pictured, and no project should be blocked on art.
+    upload: {
+      label: "Cover image",
+      extensions: ["png", "jpg", "jpeg", "webp", "gif"],
+      requiredOnCreate: false,
+      help: "Screenshot or cover image (PNG, JPG, WebP or GIF). Shown on the project card and project page.",
+    },
   },
 
   achievements: {

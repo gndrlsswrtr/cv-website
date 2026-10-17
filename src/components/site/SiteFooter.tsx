@@ -90,11 +90,26 @@ export async function SiteFooter({ profile }: { profile: FooterProfile }) {
               </a>
             ) : null}
           </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
             <Link href="/documents" className="hover:text-accent">
               Documents
             </Link>
             <span>© {year}</span>
+            {/*
+              Owner shortcut, deliberately last. It targets `/login` rather than
+              `/admin` so this component can stay inside `'use cache'` — reading
+              the session cookie here would make every public page
+              request-dependent. `proxy.ts` already bounces an authenticated
+              session from `/login` to `/admin`, so one link covers both cases:
+              signed out it shows the form, signed in it lands on the dashboard.
+            */}
+            <Link
+              href="/login"
+              title="Sign in to manage this site"
+              className="ml-auto rounded-md border border-border px-2 py-1 transition-colors hover:border-accent/50 hover:text-accent"
+            >
+              Admin
+            </Link>
           </div>
         </div>
       </div>

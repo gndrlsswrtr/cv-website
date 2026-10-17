@@ -35,12 +35,14 @@ function dateRange(row: Row, currentLabel = "Present"): string {
  * route reads through the `portfolio_public` role, so Row Level Security is
  * what enforces that, not an application-level check.
  */
-function Attachment({
+export type AttachmentResource = "certifications" | "achievements" | "projects";
+
+export function Attachment({
   row,
   resource,
 }: {
   row: Row;
-  resource: "certifications" | "achievements";
+  resource: AttachmentResource;
 }) {
   const id = str(row, "id");
   if (!id || !str(row, "stored_name")) return null;
@@ -228,6 +230,14 @@ export function ProjectGrid({ rows, linked = true }: { rows: Row[]; linked?: boo
     <div className="grid gap-4 sm:grid-cols-2">
       {rows.map((row) => {
         const slug = str(row, "slug");
+        const href = linked && slug ? `/projects/${slug}` : null;
+        // `stored_name` is the "this row has a file" flag, and the media route
+        // only serves published rows — so a cover never renders for a draft.
+        const cover = str(row, "stored_name")
+          ? `/media/projects/${str(row, "id")}`
+          : null;
+        const hasLinks = Boolean(str(row, "repo_url") || str(row, "demo_url"));
+
         const body = (
           <>
             <div className="flex items-start justify-between gap-4">
@@ -245,24 +255,47 @@ export function ProjectGrid({ rows, linked = true }: { rows: Row[]; linked?: boo
         );
 
         return (
-          <article key={String(row.id)} className="card flex flex-col p-5 transition-colors hover:border-accent/50">
-            {linked && slug ? (
-              <Link href={`/projects/${slug}`} className="block">
-                {body}
-              </Link>
-            ) : (
-              body
-            )}
-            {(str(row, "repo_url") || str(row, "demo_url")) && (
-              <div className="mt-4 flex flex-wrap gap-4 border-t border-border pt-3 text-sm">
-                {str(row, "repo_url") ? (
-                  <ExternalLink href={str(row, "repo_url")}>Source</ExternalLink>
-                ) : null}
-                {str(row, "demo_url") ? (
-                  <ExternalLink href={str(row, "demo_url")}>Live demo</ExternalLink>
-                ) : null}
-              </div>
-            )}
+          <article
+            key={String(row.id)}
+            className="card flex flex-col overflow-hidden p-0 transition-colors hover:border-accent/50"
+          >
+            {cover ? (
+              // The cover is decorative and duplicates the title link beside it,
+              // so it is hidden from assistive tech and kept out of the tab
+              // order — the same treatment `Attachment` gives its preview.
+              <span
+                aria-hidden
+                className="relative block aspect-[16/10] w-full overflow-hidden border-b border-border bg-surface"
+              >
+                <Image
+                  src={cover}
+                  alt=""
+                  fill
+                  sizes="(max-width: 640px) 100vw, 50vw"
+                  className="object-cover"
+                />
+              </span>
+            ) : null}
+
+            <div className="flex flex-1 flex-col p-5">
+              {href ? (
+                <Link href={href} className="block">
+                  {body}
+                </Link>
+              ) : (
+                body
+              )}
+              {hasLinks ? (
+                <div className="mt-4 flex flex-wrap gap-4 border-t border-border pt-3 text-sm">
+                  {str(row, "repo_url") ? (
+                    <ExternalLink href={str(row, "repo_url")}>Source</ExternalLink>
+                  ) : null}
+                  {str(row, "demo_url") ? (
+                    <ExternalLink href={str(row, "demo_url")}>Live demo</ExternalLink>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </article>
         );
       })}

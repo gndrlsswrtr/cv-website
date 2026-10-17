@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
+import { Attachment } from "@/components/site/lists";
 import { Description, ExternalLink, PageHeader, Pill } from "@/components/site/ui";
 import { getPublishedProject } from "@/lib/content";
 import { excerpt } from "@/lib/format";
@@ -81,6 +82,14 @@ async function ProjectDetail({ params }: PageProps) {
         <p className="max-w-3xl text-base leading-relaxed text-muted sm:text-lg">
           {String(project.summary)}
         </p>
+      ) : null}
+
+      {/* Only reserve the space when there is actually a file — the wrapper is
+          what keeps an absent cover from leaving a 24px hole above the pills. */}
+      {String(project.stored_name ?? "") ? (
+        <div className="mt-6 max-w-3xl">
+          <Attachment row={project} resource="projects" />
+        </div>
       ) : null}
 
       {tech.length > 0 ? (

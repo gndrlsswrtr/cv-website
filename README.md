@@ -262,6 +262,28 @@ Two serving routes:
 6. Migrations run automatically on first query. Prefer an explicit release
    step? Set `AUTO_MIGRATE=false` and run `npm run db:migrate` during deploy.
 
+### Build configuration
+
+Railway detects the Node project and runs `npm run build` to build and
+`npm run start` to serve; Railway injects `PORT` and `next start` binds it.
+Set the healthcheck in the Railway dashboard to `/` — the public homepage,
+never `/admin`, or a deploy can report healthy while it is still redirecting.
+Do **not** add `railway.json` for this service: config-as-code is deprecated,
+this service does not use it, and a file that names a builder would only
+disagree with the builder Railway is actually using.
+
+`prebuild` wipes `.next` before each build. On Railway that is a no-op (the
+checkout is fresh and `.next` is gitignored), but it is wrapped in a
+`try`/`catch` so a locked or non-empty directory can never abort the deploy —
+the failure this hook used to cause looked like
+`errno: -4094 ... path: '.next', syscall: 'rm'` and killed the build before
+`next build` ever ran.
+
+**The build reads the database.** `next build` prerenders the public pages
+from live data, so `DATABASE_URL` must be reachable during the build. If it is
+not, the build *fails* — and that is deliberate: Railway keeps the previous
+working deployment live rather than pushing an empty site over a good one.
+
 ## Backups
 
 A complete backup is **two things**: the database **and** the upload
