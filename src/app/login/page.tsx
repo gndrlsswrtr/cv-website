@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 
 import { LoginForm } from "@/components/admin/LoginForm";
 import { countUsers } from "@/lib/auth/session";
@@ -19,6 +20,12 @@ export const metadata: Metadata = {
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 export default async function LoginPage({ searchParams }: Props) {
+  // `countUsers()` has no request-time dependency, so under Cache Components it
+  // would otherwise be evaluated once at build time and frozen into the static
+  // shell — which is how a fresh deployment kept redirecting to /setup long
+  // after the account existed. `connection()` defers the read to request time.
+  await connection();
+
   // First run: send the owner to the one-time setup page.
   if ((await countUsers()) === 0) redirect("/setup");
 

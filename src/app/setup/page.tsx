@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { connection } from "next/server";
 
 import { SetupForm } from "@/components/admin/SetupForm";
 import { countUsers } from "@/lib/auth/session";
