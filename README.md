@@ -280,9 +280,17 @@ the failure this hook used to cause looked like
 `next build` ever ran.
 
 **The build reads the database.** `next build` prerenders the public pages
-from live data, so `DATABASE_URL` must be reachable during the build. If it is
-not, the build *fails* — and that is deliberate: Railway keeps the previous
-working deployment live rather than pushing an empty site over a good one.
+from live data, so `DATABASE_URL` must be reachable during the build. Two
+different outcomes, and confusing them wastes an afternoon:
+
+- **Set but unreachable** — the build *fails*, deliberately. Railway keeps the
+  previous working deployment live rather than pushing an empty site over a
+  good one.
+- **Not set at all** — the build *succeeds* with empty content. That is what
+  lets `next build` run before any database exists, and it is also how a site
+  can deploy green while showing nothing: the pages render, the admin account
+  cannot be created, and every write is refused. Check the setup page — if it
+  says `DATABASE_URL is not set`, the service has no database attached.
 
 ## Backups
 
