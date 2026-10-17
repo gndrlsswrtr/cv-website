@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { all, get, run } from "@/lib/db";
+import { all, dbUnconfiguredMessage, get, run } from "@/lib/db";
 import { delay, registerAttempt } from "@/lib/security";
 
 /**
@@ -96,6 +96,15 @@ export async function submitContact(
   }
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };
+
+  // No database: refuse honestly. The INSERT below reports 0 affected rows
+  // without throwing, so this used to answer `{ ok: true }` — telling a
+  // visitor their message was sent when it was never stored.
+  const unavailable = dbUnconfiguredMessage();
+  if (unavailable) {
+    await delay(400);
+    return { ok: false, message: unavailable };
+  }
 
   // 2. Per-IP limit — increments even on later failures, so it cannot be
   //    bypassed by re-submitting invalid input.

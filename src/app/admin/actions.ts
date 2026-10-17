@@ -23,7 +23,7 @@ import {
   updateRow,
 } from "@/lib/crud";
 import { CONTENT_TAG } from "@/lib/content";
-import { get, now, run } from "@/lib/db";
+import { dbUnconfiguredMessage, get, now, run } from "@/lib/db";
 import { type FormState } from "@/lib/form-state";
 import { getResource, isResourceKey, readValues, type ResourceDef, type ResourceKey } from "@/lib/resources";
 import { clearAttempts, delay, registerAttempt } from "@/lib/security";
@@ -84,6 +84,14 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
     return { error: "Enter your email and password." };
   }
 
+  // No database: say so. Without this the SELECT finds nothing and the
+  // operator is told their password is wrong, forever.
+  const unavailable = dbUnconfiguredMessage();
+  if (unavailable) {
+    await delay(300);
+    return { error: unavailable };
+  }
+
   const user = await get<{ id: string; password_hash: string }>(
     "SELECT id, password_hash FROM users WHERE email = $1",
     [email],
@@ -110,6 +118,15 @@ export async function logout(): Promise<void> {
  * endpoint cannot be used to mint an extra admin later.
  */
 export async function setupAdmin(_prev: FormState, formData: FormData): Promise<FormState> {
+  // Checked before anything else: with no database this action used to pass
+  // its "no users yet" test, insert nothing, and answer "please retry" — a
+  // loop the operator could never escape.
+  const unavailable = dbUnconfiguredMessage();
+  if (unavailable) {
+    await delay(300);
+    return { error: unavailable };
+  }
+
   if ((await countUsers()) > 0) {
     return { error: "An account already exists — sign in instead." };
   }

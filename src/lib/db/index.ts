@@ -94,6 +94,24 @@ export async function exec(sql: string): Promise<void> {
 }
 
 /**
+ * Why nothing can be written right now — `null` once `DATABASE_URL` is set.
+ *
+ * Degrading to empty results is right for *public reads* during `next build`,
+ * but it is a trap for *writes*: `run()` reports 0 affected rows instead of
+ * throwing, so a form that cannot possibly succeed answers "please retry"
+ * forever. (The contact form went further and reported a successful send.)
+ * Every write path surfaces this message instead, naming the variable to set.
+ */
+export function dbUnconfiguredMessage(): string | null {
+  const reason = dbStatus();
+  if (!reason) return null;
+  return (
+    `This deployment has no database, so nothing can be saved — ${reason} ` +
+    "Set DATABASE_URL on the service and redeploy."
+  );
+}
+
+/**
  * Run `fn` with every query executed as `portfolio_public`, so Row Level
  * Security applies. Falls back to a plain call when no database is configured.
  */
