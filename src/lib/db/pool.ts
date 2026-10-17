@@ -11,6 +11,7 @@ let pool: Pool | null = null;
 let poolKey = "";
 let missingReason: string | null = null;
 let lastConnectError: string | null = null;
+let varPresent = false;
 let normalisedTypes = false;
 
 /**
@@ -28,6 +29,10 @@ function toIso(value: string): string {
 }
 
 function resolveUrl(): string | null {
+  // Captured before trimming: Railway injects an *empty string* when a
+  // `${{...}}` reference fails to resolve, which is a different fault from the
+  // variable never having been set at all.
+  varPresent = process.env.DATABASE_URL !== undefined;
   const raw = process.env.DATABASE_URL?.trim();
   if (!raw) {
     missingReason = "DATABASE_URL is not set.";
