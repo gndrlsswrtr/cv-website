@@ -2,9 +2,17 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { Client, QueryResultRow } from "pg";
 
 import { ensureMigrated } from "./migrate";
-import { dbStatus, getPool } from "./pool";
+import { dbDiagnostics, dbStatus, getPool, noteConnectError, probeDatabase } from "./pool";
 
-export { closePool, dbStatus, isDbConfigured, resetPool } from "./pool";
+export {
+  closePool,
+  dbDiagnostics,
+  dbStatus,
+  isDbConfigured,
+  probeDatabase,
+  redactCredentials,
+  resetPool,
+} from "./pool";
 
 /**
  * PostgreSQL access layer.
@@ -46,15 +54,27 @@ async function execQuery<T extends QueryResultRow>(
   if (!ambient) await ensureMigrated().catch(() => undefined);
 
   if (ambient) {
-    const res = await ambient.query<T>(sql, params);
-    return { rows: res.rows, rowCount: res.rowCount };
+    try {
+      const res = await ambient.query<T>(sql, params);
+      return { rows: res.rows, rowCount: res.rowCount };
+    } catch (error) {
+      // Remembered so a later diagnostic can say "set, but unreachable"
+      // instead of silently reporting "not set". Re-thrown unchanged.
+      noteConnectError(error);
+      throw error;
+    }
   }
 
   const p = await getPool();
   if (!p) return { rows: [] as T[], rowCount: 0 };
 
-  const res = await p.query<T>(sql, params);
-  return { rows: res.rows, rowCount: res.rowCount };
+  try {
+    const res = await p.query<T>(sql, params);
+    return { rows: res.rows, rowCount: res.rowCount };
+  } catch (error) {
+    noteConnectError(error);
+    throw error;
+  }
 }
 
 /** Run a parameterised SELECT and return every row (empty when unconfigured). */
@@ -108,6 +128,35 @@ export function dbUnconfiguredMessage(): string | null {
   return (
     `This deployment has no database, so nothing can be saved — ${reason} ` +
     "Set DATABASE_URL on the service and redeploy."
+  );
+}
+
+/**
+ * The async counterpart — and the one every write path should use.
+ *
+ * `dbUnconfiguredMessage()` can only see a *missing* variable: it answers
+ * `null` whenever `DATABASE_URL` is present, however broken. An action would
+ * then sail past the guard and die with an opaque 500 when the connection is
+ * refused, which is precisely what a half-finished Railway variable change
+ * looks like from the outside. Probing first turns that into a specific,
+ * credential-free explanation naming `host:port`.
+ */
+export async function dbUnavailableMessage(): Promise<string | null> {
+  const diag = dbDiagnostics();
+  if (!diag.endpoint) {
+    return (
+      `This deployment has no database, so nothing can be saved — ${diag.reason ?? "DATABASE_URL is not set."} ` +
+      "Set DATABASE_URL on the service and redeploy."
+    );
+  }
+
+  const probe = await probeDatabase();
+  if (probe.ok) return null;
+
+  return (
+    `This deployment cannot reach its database, so nothing can be saved — ${probe.detail} ` +
+    "Check that the Postgres service is running and that this service's DATABASE_URL " +
+    "references it, then redeploy."
   );
 }
 
