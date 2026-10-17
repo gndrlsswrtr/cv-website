@@ -1,0 +1,19 @@
+
+> portfolio-cv@0.1.0 dev
+> next dev
+
+▲ Next.js 16.4.0 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.18.8:3000
+✓ Ready in 4.9s
+✓ Running next.config.ts took 1971ms
+- Cache Components enabled
+- Partial Prefetching enabled
+- Experiments (use with caution):
+  · serverActions
+
+○ Compiling /setup ...
+ GET /setup 200 in 10.0s (next.js: 9.5s, proxy.ts: 18ms, application-code: 519ms)
+ GET /setup 200 in 207ms (next.js: 64ms, proxy.ts: 18ms, application-code: 124ms)
+ GET /setup 200 in 143ms (next.js: 12ms, proxy.ts: 13ms, application-code: 118ms)
+ POST /setup 400 in 1239ms (next.js: 114ms, proxy.ts: 18ms, application-code: 1106ms)
