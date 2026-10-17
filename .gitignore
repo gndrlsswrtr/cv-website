@@ -52,3 +52,10 @@ next-env.d.ts
 /data/
 # Runtime log of generated first-run admin credentials
 .admin-credentials
+  
+  # Scratch files written by local verification runs — never application code.
+  # The autosync task runs git add -A, which would otherwise publish them.
+  /_*.out
+  /_*.err
+  /_*.txt
+  /_*.log
