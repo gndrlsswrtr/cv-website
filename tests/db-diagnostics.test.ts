@@ -73,8 +73,22 @@ describe("distinguishing unset from unreachable", () => {
   it("reports `unconfigured` when the variable is absent", async () => {
     delete process.env.DATABASE_URL;
     expect(dbDiagnostics().state).toBe("unconfigured");
+    expect(dbDiagnostics().present).toBe(false);
     expect(dbStatus()).toBe("DATABASE_URL is not set.");
     await expect(dbUnavailableMessage()).resolves.toMatch(/no database/);
+  });
+
+  it("tells an empty variable apart from an absent one", async () => {
+    // Railway injects an empty string when a ${{...}} reference does not
+    // resolve. That is a configuration fault, not a missing variable, and the
+    // operator needs to know which one they have.
+    process.env.DATABASE_URL = "";
+    expect(dbDiagnostics().present).toBe(true);
+    expect(dbDiagnostics().state).toBe("unconfigured");
+
+    const message = await dbUnavailableMessage();
+    expect(message).toContain("empty");
+    expect(message).toContain("did not resolve");
   });
 
   it("reports `misconfigured` for a URL that is not postgres", async () => {

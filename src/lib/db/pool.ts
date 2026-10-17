@@ -92,16 +92,25 @@ export function noteConnectError(error: unknown): void {
 export function dbDiagnostics(): {
   state: "unconfigured" | "misconfigured" | "configured";
   reason: string | null;
+  /** Whether `DATABASE_URL` exists in the environment at all, even if empty. */
+  present: boolean;
   endpoint: string | null;
   lastError: string | null;
 } {
   const url = resolveUrl();
   if (url) {
-    return { state: "configured", reason: null, endpoint: endpointHint(url), lastError: lastConnectError };
+    return {
+      state: "configured",
+      reason: null,
+      present: true,
+      endpoint: endpointHint(url),
+      lastError: lastConnectError,
+    };
   }
   return {
     state: missingReason === "DATABASE_URL is not set." ? "unconfigured" : "misconfigured",
     reason: missingReason,
+    present: varPresent,
     endpoint: null,
     lastError: null,
   };

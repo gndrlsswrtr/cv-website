@@ -144,8 +144,16 @@ export function dbUnconfiguredMessage(): string | null {
 export async function dbUnavailableMessage(): Promise<string | null> {
   const diag = dbDiagnostics();
   if (!diag.endpoint) {
+    // Present-but-empty is the signature of a `${{...}}` reference that never
+    // resolved: Railway injects the variable, just with no value in it.
+    const hint =
+      diag.present && !diag.reason?.includes("postgresql")
+        ? " It exists but is empty, which on Railway usually means a variable reference " +
+          "(for example ${{Postgres.DATABASE_URL}}) did not resolve — set it to point " +
+          "directly at the database service."
+        : "";
     return (
-      `This deployment has no database, so nothing can be saved — ${diag.reason ?? "DATABASE_URL is not set."} ` +
+      `This deployment has no database, so nothing can be saved — ${diag.reason ?? "DATABASE_URL is not set."}${hint} ` +
       "Set DATABASE_URL on the service and redeploy."
     );
   }
