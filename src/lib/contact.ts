@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { all, dbUnconfiguredMessage, get, run } from "@/lib/db";
+import { all, dbUnavailableMessage, get, run } from "@/lib/db";
 import { delay, registerAttempt } from "@/lib/security";
 
 /**
@@ -100,7 +100,7 @@ export async function submitContact(
   // No database: refuse honestly. The INSERT below reports 0 affected rows
   // without throwing, so this used to answer `{ ok: true }` — telling a
   // visitor their message was sent when it was never stored.
-  const unavailable = dbUnconfiguredMessage();
+  const unavailable = await dbUnavailableMessage();
   if (unavailable) {
     await delay(400);
     return { ok: false, message: unavailable };

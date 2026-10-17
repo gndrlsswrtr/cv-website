@@ -23,7 +23,7 @@ import {
   updateRow,
 } from "@/lib/crud";
 import { CONTENT_TAG } from "@/lib/content";
-import { dbUnconfiguredMessage, get, now, run } from "@/lib/db";
+import { dbUnavailableMessage, get, now, run } from "@/lib/db";
 import { type FormState } from "@/lib/form-state";
 import { getResource, isResourceKey, readValues, type ResourceDef, type ResourceKey } from "@/lib/resources";
 import { clearAttempts, delay, registerAttempt } from "@/lib/security";
@@ -86,7 +86,7 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
 
   // No database: say so. Without this the SELECT finds nothing and the
   // operator is told their password is wrong, forever.
-  const unavailable = dbUnconfiguredMessage();
+  const unavailable = await dbUnavailableMessage();
   if (unavailable) {
     await delay(300);
     return { error: unavailable };
@@ -121,7 +121,7 @@ export async function setupAdmin(_prev: FormState, formData: FormData): Promise<
   // Checked before anything else: with no database this action used to pass
   // its "no users yet" test, insert nothing, and answer "please retry" — a
   // loop the operator could never escape.
-  const unavailable = dbUnconfiguredMessage();
+  const unavailable = await dbUnavailableMessage();
   if (unavailable) {
     await delay(300);
     return { error: unavailable };
