@@ -122,6 +122,6 @@ describe("distinguishing unset from unreachable", () => {
     if (saved === UNSET) return; // no cluster in this run
     const probe = await probeDatabase();
     expect(probe.ok).toBe(true);
-    expect(dbUnavailableMessage()).resolves.toBeNull();
+    await expect(dbUnavailableMessage()).resolves.toBeNull();
   });
 });
