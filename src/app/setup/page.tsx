@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
 import { SetupForm } from "@/components/admin/SetupForm";
@@ -10,8 +10,8 @@ import { countUsers } from "@/lib/auth/session";
  * One-time first-run page.
  *
  * It 404s permanently once an account exists, so the setup endpoint cannot be
- * used later to mint an extra admin. `instant = false` keeps the redirect and
- * the 404 as real HTTP responses instead of streamed ones.
+ * used later to mint an extra admin. `instant = false` keeps the 404 a real
+ * HTTP response rather than a streamed one.
  */
 export const instant = false;
 
@@ -21,13 +21,14 @@ export const metadata: Metadata = {
 };
 
 export default async function SetupPage() {
+  // Same reasoning as the login page: this read must not be frozen into the
+  // prerendered shell, or the page would keep offering setup after the account
+  // has already been created.
+  await connection();
+
   const users = await countUsers();
-  if (users > 0) {
-    // An admin already exists — the setup window is closed for good.
-    const hasSession = false;
-    if (hasSession) redirect("/admin");
-    notFound();
-  }
+  // An admin already exists — the setup window is closed for good.
+  if (users > 0) notFound();
 
   return (
     <main id="main" className="flex min-h-screen items-center justify-center px-5 py-12">
