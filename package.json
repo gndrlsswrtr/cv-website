@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node -e \"require('node:fs').rmSync('.next',{recursive:true,force:true})\"",
+    "prebuild": "node -e \"try{require('node:fs').rmSync('.next',{recursive:true,force:true})}catch(e){console.warn('skip .next cleanup:',e.message)}\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
