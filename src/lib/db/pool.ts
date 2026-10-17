@@ -10,6 +10,7 @@ import type { Pool } from "pg";
 let pool: Pool | null = null;
 let poolKey = "";
 let missingReason: string | null = null;
+let lastConnectError: string | null = null;
 let normalisedTypes = false;
 
 /**
@@ -38,6 +39,93 @@ function resolveUrl(): string | null {
   }
   missingReason = null;
   return raw;
+}
+
+/**
+ * Strip anything that looks like a credential out of a driver message before
+ * it is shown to an operator or written to a log.
+ *
+ * `pg` normally reports only `host:port` and an error code, but an
+ * authentication failure echoes the role name and a malformed URL can echo the
+ * entire connection string, so both shapes are redacted defensively. No call
+ * site ever prints the URL itself — only this redacted text and `host:port`.
+ */
+export function redactCredentials(message: string): string {
+  return (
+    message
+      // scheme://user:secret@host  ->  scheme://***@host
+      .replace(/([a-z][a-z0-9+.-]*:\/\/)[^@\s/]*@/gi, "$1***@")
+      // password=secret / password: secret / password "secret"
+      .replace(/(pass(?:word)?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|\S+)/gi, "$1***")
+  );
+}
+
+/** `host:port` only — enough to identify the target, never a credential. */
+function endpointHint(url: string): string | null {
+  const at = url.lastIndexOf("@");
+  const authority = at === -1 ? url : url.slice(at + 1);
+  const hostPort = authority.split("/")[0]?.trim() ?? "";
+  return hostPort || null;
+}
+
+/** Remember a driver failure so diagnostics can tell it apart from "unset". */
+export function noteConnectError(error: unknown): void {
+  const raw = error instanceof Error ? error.message : String(error);
+  lastConnectError = redactCredentials(raw);
+}
+
+/**
+ * Distinguish the three states that all look like "the database is broken" from
+ * the outside:
+ *
+ * - `unconfigured` — `DATABASE_URL` is absent.
+ * - `misconfigured` — present but not a `postgres(ql)://` URL.
+ * - `configured`   — present and well-formed (says nothing about reachability).
+ *
+ * `endpoint` is `host:port`; `lastError` is already redacted.
+ */
+export function dbDiagnostics(): {
+  state: "unconfigured" | "misconfigured" | "configured";
+  reason: string | null;
+  endpoint: string | null;
+  lastError: string | null;
+} {
+  const url = resolveUrl();
+  if (url) {
+    return { state: "configured", reason: null, endpoint: endpointHint(url), lastError: lastConnectError };
+  }
+  return {
+    state: missingReason === "DATABASE_URL is not set." ? "unconfigured" : "misconfigured",
+    reason: missingReason,
+    endpoint: null,
+    lastError: null,
+  };
+}
+
+/**
+ * Open a real connection and report the outcome in operator-safe language.
+ *
+ * This is the only way to tell "the variable was never injected" apart from
+ * "the variable is there but points at the wrong place / a stopped service".
+ */
+export async function probeDatabase(): Promise<{ ok: boolean; detail: string }> {
+  const diag = dbDiagnostics();
+  if (!diag.endpoint) return { ok: false, detail: diag.reason ?? "DATABASE_URL is not set." };
+
+  try {
+    const p = await getPool();
+    if (!p) return { ok: false, detail: diag.reason ?? "DATABASE_URL is not set." };
+    await p.query("SELECT 1");
+    lastConnectError = null;
+    return { ok: true, detail: `connected to ${diag.endpoint}` };
+  } catch (error) {
+    noteConnectError(error);
+    const raw = redactCredentials(error instanceof Error ? error.message : String(error));
+    return {
+      ok: false,
+      detail: `DATABASE_URL is set and points at ${diag.endpoint}, but the connection failed: ${raw}`,
+    };
+  }
 }
 
 /** True when a database has been configured. Public pages degrade gracefully otherwise. */
