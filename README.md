@@ -91,6 +91,61 @@ browser-based `/setup` page is the other first-admin path; it 404s forever as
 soon as any account exists — see
 [Authentication](./ARCHITECTURE.md#authentication-and-sessions).)
 
+#### Forgotten admin password
+
+There is deliberately no reset-by-email flow: this app has a single owner, no
+public registration and no mail server. Both routes below need console or shell
+access to the deployment, and **neither deletes or recreates the account**.
+
+**Route A — rotate the existing account's password (recommended).**
+
+1. Produce the hash on your own machine. The password stays local — it never
+   enters a chat, issue, ticket or log:
+
+   ```bash
+   # bash / zsh
+   PW='your-new-password' npx tsx -e \
+     "import {hashPassword} from './src/lib/auth/password'; process.stdout.write(hashPassword(process.env.PW ?? ''))"
+   ```
+
+   ```powershell
+   # PowerShell
+   $env:PW = "your-new-password"
+   npx tsx -e "import {hashPassword} from './src/lib/auth/password'; process.stdout.write(hashPassword(process.env.PW ?? ''))"
+   Remove-Item Env:\PW
+   ```
+
+   The output is one `scrypt$…` string. Check which address to target first with
+   `SELECT email FROM users;`.
+
+2. In Railway, open **Postgres → Console** and run the statement, pasting that
+   string as the value (keep the quotes):
+
+   ```sql
+   UPDATE users
+      SET password_hash = 'scrypt$…output from step 1…',
+          updated_at    = now()
+    WHERE email = 'the-admin@example.com';
+   ```
+
+   Only `password_hash` and `updated_at` change. The account keeps its id,
+   email, name, role and creation date, and no content table is touched. A
+   non-matching `email` updates zero rows — nothing is lost by trying.
+
+**Route B — add a second admin from a shell that already has `DATABASE_URL`.**
+
+Run the documented script with its override, from a Railway container console or
+a one-off job (never over a public database URL — the app is deliberately
+private-networked):
+
+```bash
+ALLOW_EXTRA_ADMIN=true npm run db:create-admin
+```
+
+Sign in with the new account, then use **Settings → Change password** to put the
+original account back on a password you know. This leaves two accounts; keep
+Route A in mind if you would rather end up with one.
+
 ### 3. Start the app
 
 ```bash
