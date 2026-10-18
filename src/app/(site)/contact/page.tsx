@@ -1,15 +1,13 @@
-'use cache'
-
 import type { Metadata } from "next";
 import Link from "next/link";
-import { cacheLife, cacheTag } from "next/cache";
 import { Globe, Mail, MapPin, Phone } from "lucide-react";
 
 import { ContactForm } from "@/components/site/ContactForm";
 import { Description, EmptyState, ExternalLink, Section } from "@/components/site/ui";
-import { CONTENT_TAG, getProfile, getSiteSettings, getSocialLinks } from "@/lib/content";
+import { getProfile, getSiteSettings, getSocialLinks } from "@/lib/content";
 import { platformLabel } from "@/lib/social-platforms";
 import { pageMeta } from "@/lib/seo";
+import { connection } from "next/server";
 
 export async function generateMetadata(): Promise<Metadata> {
   return pageMeta(
@@ -24,9 +22,11 @@ function telHref(phone: string): string {
 }
 
 export default async function ContactPage() {
-  cacheTag(CONTENT_TAG);
-  cacheLife("minutes");
 
+  // Deferred to request time: the build container cannot resolve the
+  // database's private hostname, so this read must not run while
+  // `next build` prerenders the route.
+  await connection();
   const [settings, profile, links] = await Promise.all([
     getSiteSettings(),
     getProfile(),

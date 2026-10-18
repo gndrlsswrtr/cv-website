@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { connection } from "next/server";
 
 import { getPublished } from "@/lib/content";
 
@@ -20,6 +21,12 @@ const STATIC_PATHS = [
 const TODAY = new Date().toISOString().slice(0, 10);
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  // `next build` prerenders this route, and the build container cannot resolve
+  // the database's private hostname. Deferring the project lookup to request
+  // time keeps the build independent of database reachability while the static
+  // entries above stay intact.
+  await connection();
+
   const base = process.env.SITE_URL || "http://localhost:3000";
   const today = TODAY;
 

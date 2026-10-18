@@ -1,9 +1,6 @@
-'use cache'
-
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { cacheLife, cacheTag } from "next/cache";
 
 import {
   AchievementList,
@@ -14,10 +11,15 @@ import {
   SkillGrid,
 } from "@/components/site/lists";
 import { Description, EmptyState, ExternalLink, Pill, Section } from "@/components/site/ui";
-import { CONTENT_TAG, getProfile, getPublished } from "@/lib/content";
+import { getProfile, getPublished } from "@/lib/content";
 import { excerpt } from "@/lib/format";
+import { connection } from "next/server";
 
 export async function generateMetadata(): Promise<Metadata> {
+  // Metadata is rendered separately from the page, so it needs its own
+  // deferral - otherwise `next build` evaluates it while prerendering.
+  await connection();
+
   const profile = await getProfile();
   const name = profile.full_name.trim();
   const description =
@@ -25,10 +27,16 @@ export async function generateMetadata(): Promise<Metadata> {
     "Professional portfolio: experience, education, skills, projects, achievements, certifications and documents.";
 
   return {
-    title: name ? { absolute: name } : undefined,
+    // `{ absolute: name }` shows just the owner's name, with no "· Site title"
+    // suffix — but only when a name has actually been entered. An explicit
+    // `title: undefined` used to suppress the layout's inherited `title.default`
+    // once metadata became request-time, which left the home page with no
+    // `<title>` at all. Spreading instead omits the key entirely, so an unnamed
+    // profile falls back to the site title from Settings.
+    ...(name ? { title: { absolute: name } } : null),
     description,
     openGraph: {
-      title: name || undefined,
+      ...(name ? { title: name } : null),
       description,
       type: "profile",
     },
@@ -36,9 +44,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  cacheTag(CONTENT_TAG);
-  cacheLife("minutes");
 
+  // Deferred to request time: the build container cannot resolve the
+  // database's private hostname, so this read must not run while
+  // `next build` prerenders the route.
+  await connection();
   const [
     profile,
     experience,

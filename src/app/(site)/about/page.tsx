@@ -1,18 +1,20 @@
-'use cache'
-
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { cacheLife, cacheTag } from "next/cache";
 import { Globe, MapPin } from "lucide-react";
 
 import { Description, EmptyState, ExternalLink, Section } from "@/components/site/ui";
-import { CONTENT_TAG, getProfile, getSocialLinks } from "@/lib/content";
+import { getProfile, getSocialLinks } from "@/lib/content";
 import { excerpt } from "@/lib/format";
 import { platformLabel } from "@/lib/social-platforms";
 import { pageMeta } from "@/lib/seo";
+import { connection } from "next/server";
 
 export async function generateMetadata(): Promise<Metadata> {
+  // Metadata is rendered separately from the page, so it needs its own
+  // deferral - otherwise `next build` evaluates it while prerendering.
+  await connection();
+
   const profile = await getProfile();
   const name = profile.full_name.trim();
   const description =
@@ -38,9 +40,11 @@ function profileLinks(profile: {
 }
 
 export default async function AboutPage() {
-  cacheTag(CONTENT_TAG);
-  cacheLife("minutes");
 
+  // Deferred to request time: the build container cannot resolve the
+  // database's private hostname, so this read must not run while
+  // `next build` prerenders the route.
+  await connection();
   const [profile, socialLinks] = await Promise.all([getProfile(), getSocialLinks()]);
 
   const name = profile.full_name.trim() || "Your name";
